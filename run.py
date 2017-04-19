@@ -22,8 +22,7 @@ def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates,
 
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
-    logger.addHandler(logging.FileHandler(
-        '/home/am7057/big-data-science-project/script_log.txt'))
+    logger.addHandler(logging.FileHandler('script_log.txt'))
     logger.setLevel(logging.INFO)
 
     logger.info(str(datetime.datetime.now()))
