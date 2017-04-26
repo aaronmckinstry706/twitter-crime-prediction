@@ -11,6 +11,12 @@ class UtilitiesTest(unittest.TestCase):
                              lat_bounds)
         self.assertListEqual([float(i) for i in range(0, 11)],
                              lon_bounds)
+    
+    def test_split_record(self):
+        self.assertListEqual(
+            [0, 1, 2, 3.3, 4.4, u"five", 6, u"seven", u"eight"],
+            utilities.split_record(
+                u"0,1,2,3.3,4.4,five,6,seven,eight"))
 
 if __name__ == '__main__':
     unittest.main()

@@ -15,7 +15,11 @@ def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates,
         longitude_boundaries.insert(-1, new_longitude_boundary)
     return latitude_boundaries, longitude_boundaries
 
-def convert_meters_to_longitude_at_latitude(meters, latitude):
-    pass
+def split_record(s):
+    fields = s.split(',')
+    functions = [int, int, int, float, float,
+                 lambda x: x, int, lambda x: x, lambda x: x]
+    for i in range(len(fields)):
+        fields[i] = functions[i](fields[i])
+    return fields
 
-def convert_meters_to_
