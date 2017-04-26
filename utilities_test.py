@@ -1,11 +1,11 @@
 import unittest
 
-import run
+import utilities
 
-class RunTest(unittest.TestCase):
+class UtilitiesTest(unittest.TestCase):
     
     def test_get_grid_block_boundaries(self):
-        lat_bounds, lon_bounds = run.get_grid_block_boundaries(
+        lat_bounds, lon_bounds = utilities.get_grid_block_boundaries(
             (0, 0), (10, 10), 10)
         self.assertListEqual([float(i) for i in range(0, 11)],
                              lat_bounds)
