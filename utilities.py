@@ -29,7 +29,7 @@ def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates,
 
 def split_record(s):
     fields = s.split(',')
-    functions = [int, int, int, float, float,
+    functions = [int, int, float, float, float,
                  lambda x: x, int, lambda x: x, lambda x: x]
     for i in range(len(fields)):
         fields[i] = functions[i](fields[i])
@@ -55,4 +55,5 @@ def get_tweet_modifier(f):
     def modifier(record):
         new_record = [field for field in record]
         new_record[TWEET_INDEX] = f(new_record[TWEET_INDEX])
-    return tuple(new_record)
+        return tuple(new_record)
+    return modifier
