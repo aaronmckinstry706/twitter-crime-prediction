@@ -18,10 +18,11 @@ if __name__ == '__main__':
     spark_context = pyspark.SparkContext()
     tweets_csv = spark_context.textFile('tweets.csv') \
         .filter(utilities.format_is_correct) \
-        .map(utilities.remove_url) \
-        .map(utilities.remove_unicode) \
-        .map(utilities.remove_apostrophe_in_contractions) \
-        .map(utilities.keep_only_alphanumeric)
+        .map(utilities.split_record) \
+        .map(utilities.get_tweet_modifier(utilities.remove_url)) \
+        .map(utilities.get_tweet_modifier(utilities.remove_unicode)) \
+        .map(utilities.get_tweet_modifier(utilities.remove_apostrophe_in_contractions)) \
+        .map(utilities.get_tweet_modifier(utilities.keep_only_alphanumeric))
     logger.info('first tweet entry: ' + str(tweets_csv.first()))
 
     logger.info("finished")

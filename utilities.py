@@ -50,3 +50,9 @@ def keep_only_alphanumeric(s):
 def remove_apostrophe_in_contractions(s):
     return re.sub(u"(?P<pre>\w+)'(?P<post>[a-zA-Z]+)", u"\g<pre>\g<post>", s)
 
+def get_tweet_modifier(f):
+    TWEET_INDEX = 5
+    def modifier(record):
+        new_record = [field for field in record]
+        new_record[TWEET_INDEX] = f(new_record[TWEET_INDEX])
+    return tuple(new_record)
