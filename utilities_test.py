@@ -44,7 +44,7 @@ class UtilitiesTest(unittest.TestCase):
                              u"http://lihsefolihlikhsdf 12 htt flihsef https://lihihasef https:"))
     
     def test_keep_only_alphanumeric(self):
-        self.assertEqual(u"bla 2398jhasdfho8 9824 ",
+        self.assertEqual(u"bla 2398   jh    asdfho8 9824        ",
                          utilities.keep_only_alphanumeric(u"bla 2398(*^jh;;;;asdfho8 9824(&^ (*&^"))
     
     def test_remove_apostrophe_in_contractions(self):
