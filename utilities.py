@@ -1,4 +1,16 @@
 
+import math
+import re
+
+def get_longitude_delta(meters_delta, current_latitude):
+    """At a given latitude, this function calculates how many degress in longitude
+    one would need to change in order to change position by a given number of meters."""
+    # current_latitude should be in degrees, obv
+    earth_radius_meters = 6371008 # https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html
+    meters_delta = float(meters_delta)
+    current_latitude = float(current_latitude)
+    return (meters_delta / (earth_radius_meters * math.cos(current_latitude / 180.0 * math.pi))) * 180.0 / math.pi
+
 def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates,
                               n):
     south_west_coordinates = [float(x) for x in south_west_coordinates]
@@ -22,4 +34,19 @@ def split_record(s):
     for i in range(len(fields)):
         fields[i] = functions[i](fields[i])
     return fields
+
+def format_is_correct(s):
+    return bool(re.match(u"^([^,]+,){8}([^,]+){1}$", s))
+
+def remove_unicode(s):
+    return re.sub(u"[^\x00-\x7F]+", u" ", s)
+
+def remove_url(s):
+    return re.sub(u"(\s?)http(s?)://[^\s]*(\s?)", u" ", s)
+
+def replace_separator_characters(s):
+    return re.sub(u"[,\."':;\(\)!~`@#$%^&*_\+-=]+", u" ", s)
+
+def keep_only_alphanumeric(s):
+    return re.sub(u"[^a-zA-Z0-9\s]", u"", s)
 

@@ -16,8 +16,11 @@ if __name__ == '__main__':
     logger.info('Processing tweets...')
 
     spark_context = pyspark.SparkContext()
-    tweets_csv = spark_context.textFile('tweets.csv').map(
-        lambda x: x)
+    tweets_csv = spark_context.textFile('tweets.csv') \
+        .filter(utilities.format_is_correct) \
+        .map(utilities.remove_url) \
+        .map(utilities.remove_unicode) \
+        .map(utilities.keep_only_alphanumeric)
     logger.info('first tweet entry: ' + str(tweets_csv.first()))
 
     logger.info("finished")
