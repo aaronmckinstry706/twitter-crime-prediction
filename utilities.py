@@ -44,9 +44,9 @@ def remove_unicode(s):
 def remove_url(s):
     return re.sub(u"(\s?)http(s?)://[^\s]*(\s?)", u" ", s)
 
-def replace_separator_characters(s):
-    return re.sub(u"[,\."':;\(\)!~`@#$%^&*_\+-=]+", u" ", s)
-
 def keep_only_alphanumeric(s):
-    return re.sub(u"[^a-zA-Z0-9\s]", u"", s)
+    return re.sub(u"[^\w\s]", u" ", s)
+
+def remove_apostrophe_in_contractions(s):
+    return re.sub(u"(?P<pre>\w+)'(?P<post>[a-zA-Z]+)", u"\g<pre>\g<post>", s)
 

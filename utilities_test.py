@@ -30,19 +30,27 @@ class UtilitiesTest(unittest.TestCase):
         self.assertTrue(utilities.format_is_correct(u" ', ;, 2, f, , ffff, ;23mn., !!!, d"))
     
     def test_remove_unicode(self):
-        self.assertEqual(u" keep    my string", utilities.remove_unicode(u"\u342f\u8f73keep\u1212 \u237f my string"))
+        self.assertEqual(u" keep    my string", 
+                         utilities.remove_unicode(u"\u342f\u8f73keep\u1212 \u237f my string"))
         self.assertEqual(u"ABC ", utilities.remove_unicode(u"ABC\u1738"))
     
     def test_remove_url(self):
-        self.assertEqual(u" lkjlihseflkds", utilities.remove_url(u" https://www.facebook.com lkjlihseflkds"))
-        self.assertEqual(u" 12 htt flihsef", utilities.remove_url(u"https://lihsefolihlikhsdf 12 htt flihsef"))
-        self.assertEqual(u" 12 htt flihsef https:", utilities.remove_url(u"http://lihsefolihlikhsdf 12 htt flihsef https://lihihasef https:"))
+        self.assertEqual(u" lkjlihseflkds",
+                         utilities.remove_url(u" https://www.facebook.com lkjlihseflkds"))
+        self.assertEqual(u" 12 htt flihsef",
+                         utilities.remove_url(u"https://lihsefolihlikhsdf 12 htt flihsef"))
+        self.assertEqual(u" 12 htt flihsef https:",
+                         utilities.remove_url(
+                             u"http://lihsefolihlikhsdf 12 htt flihsef https://lihihasef https:"))
     
     def test_keep_only_alphanumeric(self):
-        self.assertEqual(u"bla 2398jhasdfho8 9824 ", utilities.keep_only_alphanumeric(u"bla 2398(*^jh;;;;asdfho8 9824(&^ (*&^"))
+        self.assertEqual(u"bla 2398jhasdfho8 9824 ",
+                         utilities.keep_only_alphanumeric(u"bla 2398(*^jh;;;;asdfho8 9824(&^ (*&^"))
     
-    def test_replace_separator_characters(self):
-        self.assertEqual(u",\."':;\(\)!~`@#$%^&*_\+-=", utilities.replace_separator_characters(u",.\"':;()!~`@#$%^&*_+-=\\|}{][<>?"))
+    def test_remove_apostrophe_in_contractions(self):
+        self.assertEqual(u"blasomething yodog HEYOOOO 8287(*& thats rights folks'!'''",
+                         utilities.remove_apostrophe_in_contractions(
+                             u"bla'something yodog HEYOOOO 8287(*& that's right's folks'!'''"))
 
 if __name__ == '__main__':
     unittest.main()

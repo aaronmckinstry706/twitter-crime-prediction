@@ -20,6 +20,7 @@ if __name__ == '__main__':
         .filter(utilities.format_is_correct) \
         .map(utilities.remove_url) \
         .map(utilities.remove_unicode) \
+        .map(utilities.remove_apostrophe_in_contractions) \
         .map(utilities.keep_only_alphanumeric)
     logger.info('first tweet entry: ' + str(tweets_csv.first()))
 
