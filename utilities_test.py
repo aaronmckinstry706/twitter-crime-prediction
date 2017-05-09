@@ -52,6 +52,11 @@ class UtilitiesTest(unittest.TestCase):
                          utilities.remove_apostrophe_in_contractions(
                              u"bla'something yodog HEYOOOO 8287(*& that's right's folks'!'''"))
     
+    def test_get_grid_square_bounds(self):
+        self.assertEqual(
+            [(0, 1, 0, 1), (0, 1, 1, 2), (1, 2, 0, 1), (1, 2, 1, 2)],
+            utilities.get_grid_square_bounds(range(3), range(3)))
+    
     def test_strip_excessive_whitespace(self):
         self.assertEqual(
             u";lkjasd ;lkj",

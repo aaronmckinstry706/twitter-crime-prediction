@@ -1,4 +1,5 @@
 
+import csv
 import math
 import re
 
@@ -9,10 +10,10 @@ def get_longitude_delta(meters_delta, current_latitude):
     earth_radius_meters = 6371008 # https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html
     meters_delta = float(meters_delta)
     current_latitude = float(current_latitude)
-    return (meters_delta / (earth_radius_meters * math.cos(current_latitude / 180.0 * math.pi))) * 180.0 / math.pi
+    return (meters_delta / (earth_radius_meters * math.cos(current_latitude / 180.0 * math.pi))) \
+        * 180.0 / math.pi
 
-def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates,
-                              n):
+def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates, n):
     south_west_coordinates = [float(x) for x in south_west_coordinates]
     north_east_coordinates = [float(x) for x in north_east_coordinates]
     latitude_boundaries = [south_west_coordinates[0], north_east_coordinates[0]]
@@ -25,7 +26,22 @@ def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates,
         latitude_boundaries.insert(-1, new_latitude_boundary)
         new_longitude_boundary = longitude_boundaries[0] + i*longitude_range/n
         longitude_boundaries.insert(-1, new_longitude_boundary)
-    return latitude_boundaries, longitude_boundaries
+    return latitude_boundaries, longitude_boundaries    
+
+def get_grid_square_bounds(latitude_boundaries, longitude_boundaries):
+    grid_squares = []
+    for i in range(len(latitude_boundaries)-1):
+        for j in range(len(longitude_boundaries)-1):
+            grid_squares.append(
+                (latitude_boundaries[i], latitude_boundaries[i+1],
+                 longitude_boundaries[j], longitude_boundaries[j+1]))
+    return grid_squares
+
+def print_grid_csv(filename, grid_squares):
+    with open(filename, 'w') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        for i in range(len(grid_squares)):
+            csv_writer.writerow((i,) + grid_squares[i])
 
 def split_record(s):
     fields = s.split(',')
