@@ -51,6 +51,12 @@ class UtilitiesTest(unittest.TestCase):
         self.assertEqual(u"blasomething yodog HEYOOOO 8287(*& thats rights folks'!'''",
                          utilities.remove_apostrophe_in_contractions(
                              u"bla'something yodog HEYOOOO 8287(*& that's right's folks'!'''"))
+    
+    def test_strip_excessive_whitespace(self):
+        self.assertEqual(
+            u";lkjasd ;lkj",
+            utilities.strip_excessive_whitespace(
+                u" \t\t\n ;lkjasd \n;lkj   \n  "))
 
 if __name__ == '__main__':
     unittest.main()

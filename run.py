@@ -22,7 +22,8 @@ if __name__ == '__main__':
         .map(utilities.get_tweet_modifier(utilities.remove_url)) \
         .map(utilities.get_tweet_modifier(utilities.remove_unicode)) \
         .map(utilities.get_tweet_modifier(utilities.remove_apostrophe_in_contractions)) \
-        .map(utilities.get_tweet_modifier(utilities.keep_only_alphanumeric))
+        .map(utilities.get_tweet_modifier(utilities.keep_only_alphanumeric)) \
+        .map(utilities.get_tweet_modifier(utilities.strip_excessive_whitespace))
     logger.info('first tweet entry: ' + str(tweets_csv.first()))
 
     logger.info("finished")

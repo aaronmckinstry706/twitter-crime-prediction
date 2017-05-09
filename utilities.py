@@ -50,6 +50,9 @@ def keep_only_alphanumeric(s):
 def remove_apostrophe_in_contractions(s):
     return re.sub(u"(?P<pre>\w+)'(?P<post>[a-zA-Z]+)", u"\g<pre>\g<post>", s)
 
+def strip_excessive_whitespace(s):
+    return re.sub(u"\s+", u" ", s).strip()
+
 def get_tweet_modifier(f):
     TWEET_INDEX = 5
     def modifier(record):
