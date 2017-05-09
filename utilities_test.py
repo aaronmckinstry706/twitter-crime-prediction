@@ -1,4 +1,6 @@
+import os
 import unittest
+
 
 import utilities
 
@@ -11,6 +13,14 @@ class UtilitiesTest(unittest.TestCase):
                              lat_bounds)
         self.assertListEqual([float(i) for i in range(0, 11)],
                              lon_bounds)
+    
+    def test_reading_and_printing_grid_square_csv(self):
+        grid_squares = [(0, 1, 0, 1), (0, 1, 1, 2), (1, 2, 0, 1), (1, 2, 1, 2)]
+        utilities.print_grid_csv('temp.csv', grid_squares)
+        self.assertEqual(
+            [(0, 1, 0, 1), (0, 1, 1, 2), (1, 2, 0, 1), (1, 2, 1, 2)],
+            utilities.read_grid_csv('temp.csv'))
+        os.remove('temp.csv')
     
     def test_split_record(self):
         self.assertListEqual(

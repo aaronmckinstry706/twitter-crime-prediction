@@ -38,10 +38,18 @@ def get_grid_square_bounds(latitude_boundaries, longitude_boundaries):
     return grid_squares
 
 def print_grid_csv(filename, grid_squares):
-    with open(filename, 'w') as csv_file:
+    with open(filename, 'wb') as csv_file:
         csv_writer = csv.writer(csv_file)
         for i in range(len(grid_squares)):
             csv_writer.writerow((i,) + grid_squares[i])
+
+def read_grid_csv(filename):
+    with open(filename, 'rb') as csv_file:
+        csv_reader = csv.reader(csv_file)
+        grid_squares = []
+        for row in csv_reader:
+            grid_squares.append(tuple(float(num) for num in row[1:]))
+        return grid_squares
 
 def split_record(s):
     fields = s.split(',')
