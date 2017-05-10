@@ -1,6 +1,7 @@
 import datetime
 import logging
 import operator
+import sys
 
 import pyspark
 import pyspark.ml.feature as feature
@@ -30,11 +31,14 @@ if __name__ == '__main__':
     grid_boundaries = utilities.read_grid_csv('grid_bounds.csv')
 
     spark_context = pyspark.SparkContext()
-    tweet_grid = spark_context.textFile('tweets.csv') \
+    tweet_records = spark_context.textFile('tweets.csv') \
         .filter(utilities.format_is_correct) \
         .map(utilities.split_record) \
         .filter(lambda record: record[utilities.field_index['timestamp']] > tweet_history_cutoff \
-                    and record[utilities.field_index['timestamp']] < prediction_timestamp) \
+                           and record[utilities.field_index['timestamp']] < prediction_timestamp)
+    num_tweets = tweet_records.count()
+    logger.info('number of tweets: ' + str(num_tweets))
+    tweet_grid = tweet_records \
         .map(utilities.get_tweet_modifier(utilities.remove_url)) \
         .map(utilities.get_tweet_modifier(utilities.remove_unicode)) \
         .map(utilities.get_tweet_modifier(utilities.remove_apostrophe_in_contractions)) \
