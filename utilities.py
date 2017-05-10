@@ -3,8 +3,11 @@ import csv
 import math
 import re
 
+field_index = {'id': 0, 'timestamp': 1, 'postalCode': 2, 'lon': 3, 'lat': 4, 'tweet': 5,
+               'user_id': 6, 'application': 7, 'source': 8}
+
 def get_longitude_delta(meters_delta, current_latitude):
-    """At a given latitude, this function calculates how many degress in longitude
+    """At a given latitude, this function calculates how many degrees in longitude
     one would need to change in order to change position by a given number of meters."""
     # current_latitude should be in degrees, obv
     earth_radius_meters = 6371008 # https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html
@@ -14,6 +17,7 @@ def get_longitude_delta(meters_delta, current_latitude):
         * 180.0 / math.pi
 
 def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates, n):
+    # type: (Tuple[float, float], Tuple[float, float]) -> Tuple[List[float], List[float]]
     south_west_coordinates = [float(x) for x in south_west_coordinates]
     north_east_coordinates = [float(x) for x in north_east_coordinates]
     latitude_boundaries = [south_west_coordinates[0], north_east_coordinates[0]]
@@ -29,6 +33,7 @@ def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates, n)
     return latitude_boundaries, longitude_boundaries    
 
 def get_grid_square_bounds(latitude_boundaries, longitude_boundaries):
+    # type: (List[float], List[float]) -> List[Tuple[float, float, float, float]]
     grid_squares = []
     for i in range(len(latitude_boundaries)-1):
         for j in range(len(longitude_boundaries)-1):
@@ -38,6 +43,7 @@ def get_grid_square_bounds(latitude_boundaries, longitude_boundaries):
     return grid_squares
 
 def print_grid_csv(filename, grid_squares):
+    # type: (str, List[Tuple[float, float, float, float]]) -> None
     with open(filename, 'wb') as csv_file:
         csv_writer = csv.writer(csv_file)
         for i in range(len(grid_squares)):
@@ -52,12 +58,13 @@ def read_grid_csv(filename):
         return grid_squares
 
 def split_record(s):
+    # type: (str) -> Tuple[int, int, float, float, float, str, int, str, str]
     fields = s.split(',')
     functions = [int, int, float, float, float,
                  lambda x: x, int, lambda x: x, lambda x: x]
     for i in range(len(fields)):
         fields[i] = functions[i](fields[i])
-    return fields
+    return tuple(fields)
 
 def format_is_correct(s):
     return bool(re.match(u"^([^,]+,){8}([^,]+){1}$", s))
@@ -78,9 +85,18 @@ def strip_excessive_whitespace(s):
     return re.sub(u"\s+", u" ", s).strip()
 
 def get_tweet_modifier(f):
-    TWEET_INDEX = 5
+    # type: ((str) -> str) -> (Tuple[int, int, float, float, float, str, int, str, str] -> [int, int, float, float, float, str, int, str, str])
     def modifier(record):
         new_record = [field for field in record]
-        new_record[TWEET_INDEX] = f(new_record[TWEET_INDEX])
+        new_record[field_index['tweet']] = f(new_record[field_index['tweet']])
         return tuple(new_record)
     return modifier
+
+def get_grid_index(grid_boundaries, record):
+    for i in range(len(grid_boundaries)):
+        min_lat, max_lat, min_lon, max_lon = grid_boundaries[i]
+        if record[field_index['lat']] >= min_lat and record[field_index['lat']] < max_lat:
+            if record[field_index['lon']] >= min_lon and record[field_index['lon']] < max_lon:
+                return i
+    return len(grid_boundaries)
+

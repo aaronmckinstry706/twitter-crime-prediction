@@ -23,8 +23,8 @@ class UtilitiesTest(unittest.TestCase):
         os.remove('temp.csv')
     
     def test_split_record(self):
-        self.assertListEqual(
-            [0, 1, 2, 3.3, 4.4, u"five", 6, u"seven", u"eight"],
+        self.assertTupleEqual(
+            (0, 1, 2, 3.3, 4.4, u"five", 6, u"seven", u"eight"),
             utilities.split_record(
                 u"0,1,2,3.3,4.4,five,6,seven,eight"))
     
@@ -72,6 +72,13 @@ class UtilitiesTest(unittest.TestCase):
             u";lkjasd ;lkj",
             utilities.strip_excessive_whitespace(
                 u" \t\t\n ;lkjasd \n;lkj   \n  "))
+    
+    def test_get_grid_index(self):
+        grid_bounds = [(0, 1, 0, 1), (0, 1, 1, 2), (1, 2, 0, 1), (1, 2, 1, 2)]
+        record = [None for i in range(len(utilities.field_index))]
+        record[utilities.field_index['lat']] = 0.5
+        record[utilities.field_index['lon']] = 1.5
+        self.assertEqual(1, utilities.get_grid_index(grid_bounds, record))
 
 if __name__ == '__main__':
     unittest.main()
