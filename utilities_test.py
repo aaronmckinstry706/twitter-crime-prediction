@@ -79,6 +79,14 @@ class UtilitiesTest(unittest.TestCase):
         record[utilities.field_index['lat']] = 0.5
         record[utilities.field_index['lon']] = 1.5
         self.assertEqual(1, utilities.get_grid_index(grid_bounds, record))
+    
+    def test_process_argv(self):
+        bad_argv1 = [None, '12s', 's', '!']
+        bad_argv2 = [None, '2015', '13', '42']
+        good_argv = [None, '2015', '11', '4']
+        self.assertEqual(None, utilities.process_argv(bad_argv1))
+        self.assertEqual(None, utilities.process_argv(bad_argv2))
+        self.assertTupleEqual((2015, 11, 4), utilities.process_argv(good_argv))
 
 if __name__ == '__main__':
     unittest.main()
