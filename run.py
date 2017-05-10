@@ -27,7 +27,7 @@ if __name__ == '__main__':
         .map(utilities.get_tweet_modifier(utilities.strip_excessive_whitespace)) \
         .map(lambda record: (utilities.get_grid_index(grid_boundaries, record),
                              record[utilities.field_index['tweet']])) \
-        .reduceByKey(operator.add)
+        .reduceByKey(lambda (a,b): a + ' ' + b)
     logger.info('first tweet entry: ' + str(tweets.first()))
 
     logger.info("finished")
