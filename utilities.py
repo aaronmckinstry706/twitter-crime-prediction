@@ -17,7 +17,7 @@ def get_longitude_delta(meters_delta, current_latitude):
     return (meters_delta / (earth_radius_meters * math.cos(current_latitude / 180.0 * math.pi))) \
         * 180.0 / math.pi
 
-def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates, n):
+def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates, n_lat, n_lon):
     # type: (Tuple[float, float], Tuple[float, float]) -> Tuple[List[float], List[float]]
     south_west_coordinates = [float(x) for x in south_west_coordinates]
     north_east_coordinates = [float(x) for x in north_east_coordinates]
@@ -26,10 +26,11 @@ def get_grid_block_boundaries(south_west_coordinates, north_east_coordinates, n)
     longitude_boundaries = [south_west_coordinates[1],
                             north_east_coordinates[1]]
     longitude_range = longitude_boundaries[1] - longitude_boundaries[0]
-    for i in range(1, n):
-        new_latitude_boundary = latitude_boundaries[0] + i*latitude_range/n
+    for i in range(1, n_lat):
+        new_latitude_boundary = latitude_boundaries[0] + i*latitude_range/n_lat
         latitude_boundaries.insert(-1, new_latitude_boundary)
-        new_longitude_boundary = longitude_boundaries[0] + i*longitude_range/n
+    for i in range(1, n_lon):
+        new_longitude_boundary = longitude_boundaries[0] + i*longitude_range/n_lon
         longitude_boundaries.insert(-1, new_longitude_boundary)
     return latitude_boundaries, longitude_boundaries    
 

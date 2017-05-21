@@ -8,10 +8,10 @@ class UtilitiesTest(unittest.TestCase):
     
     def test_get_grid_block_boundaries(self):
         lat_bounds, lon_bounds = utilities.get_grid_block_boundaries(
-            (0, 0), (10, 10), 10)
+            (0, 0), (10, 10), 10, 5)
         self.assertListEqual([float(i) for i in range(0, 11)],
                              lat_bounds)
-        self.assertListEqual([float(i) for i in range(0, 11)],
+        self.assertListEqual([float(i)*2 for i in range(0, 6)],
                              lon_bounds)
     
     def test_reading_and_printing_grid_square_csv(self):
