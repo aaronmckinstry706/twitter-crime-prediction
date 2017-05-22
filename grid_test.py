@@ -21,3 +21,11 @@ class GridTest(unittest.TestCase):
             grid.read_grid_csv('temp.csv'))
         os.remove('temp.csv')
 
+    def test_get_longitude_delta(self):
+        self.assertAlmostEqual(0.0126829387, grid.get_longitude_delta(1000, 45), places=4)
+    
+    def test_get_grid_square_bounds(self):
+        self.assertEqual(
+            [(0, 1, 0, 1), (0, 1, 1, 2), (1, 2, 0, 1), (1, 2, 1, 2)],
+            grid.get_grid_square_bounds(range(3), range(3)))
+

@@ -9,7 +9,7 @@ import pyspark.ml.feature as feature
 import pyspark.sql as sql
 import sqlite3
 
-import utilities
+import preprocessing
 
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
@@ -22,15 +22,15 @@ if __name__ == '__main__':
     
     spark_context = pyspark.SparkContext()
     tweets_by_day = spark_context.textFile('tweets.csv') \
-        .filter(utilities.format_is_correct) \
-        .map(utilities.split_record) \
-        .filter(lambda record: record[utilities.field_index['timestamp']] > 1463254639 - 1 * 2592000) \
-        .map(utilities.get_tweet_modifier(utilities.remove_url)) \
-        .map(utilities.get_tweet_modifier(utilities.remove_unicode)) \
-        .map(utilities.get_tweet_modifier(utilities.remove_apostrophe_in_contractions)) \
-        .map(utilities.get_tweet_modifier(utilities.keep_only_alphanumeric)) \
-        .map(utilities.get_tweet_modifier(utilities.strip_excessive_whitespace)) \
-        .map(lambda record: str(record[utilities.field_index['timestamp']] / (60 * 60 * 24)) + "," + record[utilities.field_index['tweet']]) \
+        .filter(preprocessing.format_is_correct) \
+        .map(preprocessing.split_record) \
+        .filter(lambda record: record[preprocessing.field_index['timestamp']] > 1463254639 - 1 * 2592000) \
+        .map(preprocessing.get_tweet_modifier(preprocessing.remove_url)) \
+        .map(preprocessing.get_tweet_modifier(preprocessing.remove_unicode)) \
+        .map(preprocessing.get_tweet_modifier(preprocessing.remove_apostrophe_in_contractions)) \
+        .map(preprocessing.get_tweet_modifier(preprocessing.keep_only_alphanumeric)) \
+        .map(preprocessing.get_tweet_modifier(preprocessing.strip_excessive_whitespace)) \
+        .map(lambda record: str(record[preprocessing.field_index['timestamp']] / (60 * 60 * 24)) + "," + record[preprocessing.field_index['tweet']]) \
         .saveAsTextFile('tweets_by_day_text')
     
     logger.info("finished")
