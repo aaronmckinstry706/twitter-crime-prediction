@@ -27,7 +27,7 @@ if __name__ == '__main__':
     (year, month, day) = command_line_args
     prediction_timestamp = (datetime.datetime(year, month, day) - datetime.datetime(1970, 1, 1)) \
         .total_seconds()
-    tweet_history_cutoff = prediction_timestamp - 3*24*60*60
+    tweet_history_cutoff = prediction_timestamp - 31*24*60*60
 
     logger.info('Processing tweets...')
     
