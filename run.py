@@ -9,7 +9,7 @@ import pyspark.ml.feature as feature
 import pyspark.sql as sql
 import sqlite3
 
-import preprocessing
+import preprocessing as pp
 import grid
 import clargs
 
@@ -35,20 +35,20 @@ if __name__ == '__main__':
 
     spark_context = pyspark.SparkContext()
     tweet_records = spark_context.textFile('tweets.csv') \
-        .filter(preprocessing.tweet_format_is_correct) \
-        .map(preprocessing.split_tweet_record) \
-        .filter(lambda record: record[preprocessing.tweet_field_index['timestamp']] > tweet_history_cutoff \
-                           and record[preprocessing.tweet_field_index['timestamp']] < prediction_timestamp)
+        .filter(pp.tweet_format_is_correct) \
+        .map(pp.split_tweet_record) \
+        .filter(lambda record: record[pp.tweet_field_index['timestamp']] > tweet_history_cutoff \
+                           and record[pp.tweet_field_index['timestamp']] < prediction_timestamp)
     num_tweets = tweet_records.count()
     logger.info('number of tweets: ' + str(num_tweets))
     tweet_grid = tweet_records \
-        .map(preprocessing.get_tweet_modifier(preprocessing.remove_url)) \
-        .map(preprocessing.get_tweet_modifier(preprocessing.remove_unicode)) \
-        .map(preprocessing.get_tweet_modifier(preprocessing.remove_apostrophe_in_contractions)) \
-        .map(preprocessing.get_tweet_modifier(preprocessing.keep_only_alphanumeric)) \
-        .map(preprocessing.get_tweet_modifier(preprocessing.strip_excessive_whitespace)) \
-        .map(lambda record: (preprocessing.get_grid_index(grid_boundaries, record),
-                             record[preprocessing.tweet_field_index['tweet']])) \
+        .map(pp.get_tweet_modifier(pp.remove_url)) \
+        .map(pp.get_tweet_modifier(pp.remove_unicode)) \
+        .map(pp.get_tweet_modifier(pp.remove_apostrophe_in_contractions)) \
+        .map(pp.get_tweet_modifier(pp.keep_only_alphanumeric)) \
+        .map(pp.get_tweet_modifier(pp.strip_excessive_whitespace)) \
+        .map(lambda record: (pp.get_grid_index(grid_boundaries, record, 'tweet'),
+                             record[pp.tweet_field_index['tweet']])) \
         .map(lambda pair: (pair[0], pair[1].split(' '))) \
         .reduceByKey(lambda a,b: a + b)
     
@@ -69,8 +69,8 @@ if __name__ == '__main__':
         format="com.databricks.spark.csv",
         header="true",
         inferSchema="true")
+    complaints_rdd = complaints_df.rdd.map(list).filter(pp.)
     
-    complaints_rdd = complaints_df.rdd.map(list)
     
     logger.info("finished")
 
