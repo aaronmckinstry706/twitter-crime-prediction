@@ -69,8 +69,12 @@ if __name__ == '__main__':
         format="com.databricks.spark.csv",
         header="true",
         inferSchema="true")
-    complaints_rdd = complaints_df.rdd.map(list).filter(pp.)
+    complaints_rdd = complaints_df.rdd.map(list).filter(pp.complaint_is_valid)
+    complaints_per_day_per_gridsquare = complaints_rdd \
+        .map(lambda complaint: ((pp.get_complaint_occurrence_day(complaint), pp.get_grid_index(grid_boundaries, complaint, 'complaint')), 1) \
+        .countByKey()
     
+    logger.info('complaint counts: ' + str(complaints_per_day_per_gridsquare.first()))
     
     logger.info("finished")
 
