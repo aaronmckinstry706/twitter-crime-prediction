@@ -3,6 +3,13 @@ import unittest
 import preprocessing
 
 class PreprocessingTest(unittest.TestCase):
+    def test_complaint_is_valid(self):
+        self.assertTrue(preprocessing.complaint_is_valid(
+            [101109527, u'12/31/2015', u'23:45:00', None, None, u'12/31/2015', 113, u'FORGERY', 729, u'FORGERY,ETC.,UNCLASSIFIED-FELO', u'COMPLETED', u'FELONY', u'N.Y. POLICE DEPT', u'BRONX', 44, u'INSIDE', u'BAR/NIGHT CLUB', None, None, 1007314, 241257, 40.828848333, -73.916661142, u'(40.828848333, -73.916661142)']))
+        self.assertTrue(preprocessing.complaint_is_valid(
+            [641637920, u'12/31/2015', u'23:25:00', u'12/31/2015', u'23:30:00', u'12/31/2015', 344, u'ASSAULT 3 & RELATED OFFENSES', 101, u'ASSAULT 3', u'COMPLETED', u'MISDEMEANOR', u'N.Y. POLICE DEPT', u'MANHATTAN', 13, u'FRONT OF', u'OTHER', None, None, 987606, 208148, 40.7380024, -73.98789129, u'(40.7380024, -73.98789129)']))
+        self.assertFalse(preprocessing.complaint_is_valid(
+            [340513307, u'04/06/2015', u'12:00:00', u'04/10/2015', u'18:00:00', u'12/21/2015', 104, u'RAPE', 155, u'RAPE 2', u'COMPLETED', u'FELONY', u'N.Y. POLICE DEPT', u'QUEENS', 110, u'INSIDE', u'OTHER', None, None, None, None, None, None, None]))
     
     def test_split_tweet_record(self):
         self.assertTupleEqual(

@@ -64,5 +64,13 @@ if __name__ == '__main__':
     
     logger.info('first dataframe entry: ' + str(topicDistributions.first().asDict()))
     
+    complaints_df = spark_session.read.load(
+        "crime_complaints_with_header.csv",
+        format="com.databricks.spark.csv",
+        header="true",
+        inferSchema="true")
+    
+    complaints_rdd = complaints_df.rdd.map(list)
+    
     logger.info("finished")
 

@@ -3,6 +3,19 @@ import re
 tweet_field_index = {'id': 0, 'timestamp': 1, 'postalCode': 2, 'lon': 3, 'lat': 4, 'tweet': 5,
                'user_id': 6, 'application': 7, 'source': 8}
 
+complaint_field_index = {
+    'from_date': 1,
+    'to_date': 3,
+    'latitude': 21,
+    'longitude': 22
+}
+
+def complaint_is_valid(complaint_record):
+    if complaint_record[complaint_field_index['from_date']] == complaint_record[complaint_field_index['to_date']] \
+            or complaint_record[complaint_field_index['to_date']] == None:
+        return True
+    return False
+
 def split_tweet_record(s):
     # type: (str) -> Tuple[int, int, float, float, float, str, int, str, str]
     fields = s.split(',')
