@@ -4,19 +4,19 @@ import preprocessing
 
 class PreprocessingTest(unittest.TestCase):
     
-    def test_split_record(self):
+    def test_split_tweet_record(self):
         self.assertTupleEqual(
             (0, 1, 2, 3.3, 4.4, u"five", 6, u"seven", u"eight"),
-            preprocessing.split_record(
+            preprocessing.split_tweet_record(
                 u"0,1,2,3.3,4.4,five,6,seven,eight"))
     
-    def test_format_is_correct(self):
-        self.assertFalse(preprocessing.format_is_correct("a,3,2,d,2,3,d,3"))
-        self.assertFalse(preprocessing.format_is_correct(u",, ', ;, 2\uacac, f, a, s, d, d, d   "))
-        self.assertFalse(preprocessing.format_is_correct(u" , , ,, , , , , "))
-        self.assertTrue(preprocessing.format_is_correct("a,3,2,d,2,3,d,3,8"))
-        self.assertTrue(preprocessing.format_is_correct(u" ', ;, 2, f,\u7777 a, s, d, d, d"))
-        self.assertTrue(preprocessing.format_is_correct(u" ', ;, 2, f, , ffff, ;23mn., !!!, d"))
+    def test_tweet_format_is_correct(self):
+        self.assertFalse(preprocessing.tweet_format_is_correct("a,3,2,d,2,3,d,3"))
+        self.assertFalse(preprocessing.tweet_format_is_correct(u",, ', ;, 2\uacac, f, a, s, d, d, d   "))
+        self.assertFalse(preprocessing.tweet_format_is_correct(u" , , ,, , , , , "))
+        self.assertTrue(preprocessing.tweet_format_is_correct("a,3,2,d,2,3,d,3,8"))
+        self.assertTrue(preprocessing.tweet_format_is_correct(u" ', ;, 2, f,\u7777 a, s, d, d, d"))
+        self.assertTrue(preprocessing.tweet_format_is_correct(u" ', ;, 2, f, , ffff, ;23mn., !!!, d"))
     
     def test_remove_unicode(self):
         self.assertEqual(u" keep    my string", 
@@ -49,8 +49,10 @@ class PreprocessingTest(unittest.TestCase):
     
     def test_get_grid_index(self):
         grid_bounds = [(0, 1, 0, 1), (0, 1, 1, 2), (1, 2, 0, 1), (1, 2, 1, 2)]
-        record = [None for i in range(len(preprocessing.field_index))]
-        record[preprocessing.field_index['lat']] = 0.5
-        record[preprocessing.field_index['lon']] = 1.5
+        record = [None for i in range(len(preprocessing.tweet_field_index))]
+        record[preprocessing.tweet_field_index['lat']] = 0.5
+        record[preprocessing.tweet_field_index['lon']] = 1.5
         self.assertEqual(1, preprocessing.get_grid_index(grid_bounds, record))
 
+if __name__ == '__main__':
+    unittest.main()

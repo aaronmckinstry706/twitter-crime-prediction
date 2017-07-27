@@ -22,15 +22,15 @@ if __name__ == '__main__':
     
     spark_context = pyspark.SparkContext()
     tweets_by_day = spark_context.textFile('tweets.csv') \
-        .filter(preprocessing.format_is_correct) \
-        .map(preprocessing.split_record) \
-        .filter(lambda record: record[preprocessing.field_index['timestamp']] > 1463254639 - 1 * 2592000) \
+        .filter(preprocessing.tweet_format_is_correct) \
+        .map(preprocessing.split_tweet_record) \
+        .filter(lambda record: record[preprocessing.tweet_field_index['timestamp']] > 1463254639 - 1 * 2592000) \
         .map(preprocessing.get_tweet_modifier(preprocessing.remove_url)) \
         .map(preprocessing.get_tweet_modifier(preprocessing.remove_unicode)) \
         .map(preprocessing.get_tweet_modifier(preprocessing.remove_apostrophe_in_contractions)) \
         .map(preprocessing.get_tweet_modifier(preprocessing.keep_only_alphanumeric)) \
         .map(preprocessing.get_tweet_modifier(preprocessing.strip_excessive_whitespace)) \
-        .map(lambda record: str(record[preprocessing.field_index['timestamp']] / (60 * 60 * 24)) + "," + record[preprocessing.field_index['tweet']]) \
+        .map(lambda record: str(record[preprocessing.tweet_field_index['timestamp']] / (60 * 60 * 24)) + "," + record[preprocessing.tweet_field_index['tweet']]) \
         .saveAsTextFile('tweets_by_day_text')
     
     logger.info("finished")

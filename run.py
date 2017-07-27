@@ -35,10 +35,10 @@ if __name__ == '__main__':
 
     spark_context = pyspark.SparkContext()
     tweet_records = spark_context.textFile('tweets.csv') \
-        .filter(preprocessing.format_is_correct) \
-        .map(preprocessing.split_record) \
-        .filter(lambda record: record[preprocessing.field_index['timestamp']] > tweet_history_cutoff \
-                           and record[preprocessing.field_index['timestamp']] < prediction_timestamp)
+        .filter(preprocessing.tweet_format_is_correct) \
+        .map(preprocessing.split_tweet_record) \
+        .filter(lambda record: record[preprocessing.tweet_field_index['timestamp']] > tweet_history_cutoff \
+                           and record[preprocessing.tweet_field_index['timestamp']] < prediction_timestamp)
     num_tweets = tweet_records.count()
     logger.info('number of tweets: ' + str(num_tweets))
     tweet_grid = tweet_records \
@@ -48,7 +48,7 @@ if __name__ == '__main__':
         .map(preprocessing.get_tweet_modifier(preprocessing.keep_only_alphanumeric)) \
         .map(preprocessing.get_tweet_modifier(preprocessing.strip_excessive_whitespace)) \
         .map(lambda record: (preprocessing.get_grid_index(grid_boundaries, record),
-                             record[preprocessing.field_index['tweet']])) \
+                             record[preprocessing.tweet_field_index['tweet']])) \
         .map(lambda pair: (pair[0], pair[1].split(' '))) \
         .reduceByKey(lambda a,b: a + b)
     
