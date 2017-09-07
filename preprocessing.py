@@ -10,6 +10,8 @@ complaint_field_index = {
 
 # Only returns true if complaint is of a crime which occurred within a single day.
 def complaint_is_valid(complaint_record):
+    if complaint_record[complaint_field_index['from_date']] == None:
+        return False
     if complaint_record[complaint_field_index['from_date']] == complaint_record[complaint_field_index['to_date']] \
             or complaint_record[complaint_field_index['to_date']] == None:
         return True

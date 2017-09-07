@@ -10,6 +10,8 @@ class PreprocessingTest(unittest.TestCase):
             [641637920, u'12/31/2015', u'23:25:00', u'12/31/2015', u'23:30:00', u'12/31/2015', 344, u'ASSAULT 3 & RELATED OFFENSES', 101, u'ASSAULT 3', u'COMPLETED', u'MISDEMEANOR', u'N.Y. POLICE DEPT', u'MANHATTAN', 13, u'FRONT OF', u'OTHER', None, None, 987606, 208148, 40.7380024, -73.98789129, u'(40.7380024, -73.98789129)']))
         self.assertFalse(pp.complaint_is_valid(
             [340513307, u'04/06/2015', u'12:00:00', u'04/10/2015', u'18:00:00', u'12/21/2015', 104, u'RAPE', 155, u'RAPE 2', u'COMPLETED', u'FELONY', u'N.Y. POLICE DEPT', u'QUEENS', 110, u'INSIDE', u'OTHER', None, None, None, None, None, None, None]))
+        self.assertFalse(pp.complaint_is_valid(
+            [None for i in range(max(pp.complaint_field_index.values()) + 1)]))
     
     def test_get_complaint_occurrence_day(self):
         crime_record = [None for i in range(max(pp.complaint_field_index.values()) + 1)]

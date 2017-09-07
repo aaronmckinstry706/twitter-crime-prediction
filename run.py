@@ -34,6 +34,7 @@ if __name__ == '__main__':
     grid_boundaries = grid.read_grid_csv('grid_bounds.csv')
 
     spark_context = pyspark.SparkContext()
+    spark_context.setLogLevel("ERROR")
     tweet_records = spark_context.textFile('tweets.csv') \
         .filter(pp.tweet_format_is_correct) \
         .map(pp.split_tweet_record) \
@@ -69,12 +70,19 @@ if __name__ == '__main__':
         format="com.databricks.spark.csv",
         header="true",
         inferSchema="true")
-    complaints_rdd = complaints_df.rdd.map(list).filter(pp.complaint_is_valid)
-    complaints_per_day_per_gridsquare = complaints_rdd \
-        .map(lambda complaint: ((pp.get_complaint_occurrence_day(complaint), pp.get_grid_index(grid_boundaries, complaint, 'complaint')), 1) \
-        .countByKey()
+    complaints_rdd = complaints_df.rdd \
+        .map(list) \
+        .filter(pp.complaint_is_valid) \
+        .filter(
+            lambda cr:
+                pp.get_complaint_occurrence_day(cr)*24*60*60 >= tweet_history_cutoff
+                and pp.get_complaint_occurrence_day(cr)*24*60*60 < prediction_timestamp)
+    logger.info("num valid complaints: " + str(complaints_rdd.count()))
+#    complaints_per_day_per_gridsquare = complaints_rdd \
+#        .map(lambda complaint: ((pp.get_complaint_occurrence_day(complaint), pp.get_grid_index(grid_boundaries, complaint, 'complaint')), 1)) \
+#        .countByKey()
     
-    logger.info('complaint counts: ' + str(complaints_per_day_per_gridsquare.first()))
+#    logger.info('complaint counts: ' + str(complaints_per_day_per_gridsquare.items()[0:4]))
     
     logger.info("finished")
 
