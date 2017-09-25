@@ -118,10 +118,10 @@ tokens_df_schema = types.StructType([
 tokens_df = ss.createDataFrame(tokens_rdd, schema=tokens_df_schema)
 
 hashing_tf = feature.HashingTF(numFeatures=(2^18)-1, inputCol='tokens', outputCol='token_frequencies')
-tokens_df = hashing_tf.transform(tokens_df).drop('tokens')
-
 lda = clustering.LDA().setFeaturesCol('token_frequencies').setK(10).setTopicDistributionCol('topic_distributions')
-lda_model = lda.fit(tokens_df)
-tokens_df = lda_model.transform(tokens_df).drop('token_frequencies')
+pipeline = ml.Pipeline(stages=[hashing_tf, lda])
+lda_model = pipeline.fit(tokens_df)
+topic_distributions = lda_model.transform(tokens_df).drop('tokens').drop('token_frequencies')
 
-LOGGER.debug(str(tokens_df.count()) + " entries like " + str(tokens_df.take(1)))
+LOGGER.debug(str(topic_distributions.count()) + " entries like " + str(topic_distributions.take(1)))
+
