@@ -1,88 +1,127 @@
 import datetime
 import logging
 import operator
+import os
 import sys
 
-import pyspark
-import pyspark.ml.clustering as clustering
+import pyspark as pyspark
 import pyspark.ml.feature as feature
+import pyspark.ml as ml
+import pyspark.ml.clustering as clustering
 import pyspark.sql as sql
-import sqlite3
+import pyspark.sql.functions as functions
+import pyspark.sql.types as types
 
-import preprocessing as pp
+import twokenize
 import grid
-import clargs
 
-if __name__ == '__main__':
-    logger = logging.getLogger(__name__)
-    logger.addHandler(logging.FileHandler('script_log.txt'))
-    logger.setLevel(logging.INFO)
+LOGGER = logging.getLogger(__name__)
+LOGGER.addHandler(logging.StreamHandler(sys.stderr))
+LOGGER.addHandler(logging.FileHandler('script_log.txt'))
+LOGGER.setLevel(logging.DEBUG)
 
-    logger.info(str(datetime.datetime.now()))
-    
-    command_line_args = clargs.process_argv(sys.argv)
-    if not command_line_args:
-        print("Usage: python run.py <year> <month> <day> \n(year/month/day are all integers)")
-        exit()
-    (year, month, day) = command_line_args
-    prediction_timestamp = (datetime.datetime(year, month, day) - datetime.datetime(1970, 1, 1)) \
-        .total_seconds()
-    tweet_history_cutoff = prediction_timestamp - 31*24*60*60
+sc = pyspark.SparkContext()
 
-    logger.info('Processing tweets...')
+# From https://stackoverflow.com/a/36218558 .
+def sparkImport(module_name, module_directory):
+    """
+    Convenience function. 
     
-    grid_boundaries = grid.read_grid_csv('grid_bounds.csv')
+    Tells the SparkContext sc (must already exist) to load
+    module module_name on every computational node before
+    executing an RDD. 
+    
+    Args:
+        module_name: the name of the module, without ".py". 
+        module_directory: the path, absolute or relative, to
+                          the directory containing module
+                          module_Name. 
+    
+    Returns: none. 
+    """
+    module_path = os.path.abspath(
+        module_directory + "/" + module_name + ".py")
+    sc.addPyFile(module_path)
 
-    spark_context = pyspark.SparkContext()
-    spark_context.setLogLevel("ERROR")
-    tweet_records = spark_context.textFile('tweets.csv') \
-        .filter(pp.tweet_format_is_correct) \
-        .map(pp.split_tweet_record) \
-        .filter(lambda record: record[pp.tweet_field_index['timestamp']] > tweet_history_cutoff \
-                           and record[pp.tweet_field_index['timestamp']] < prediction_timestamp)
-    num_tweets = tweet_records.count()
-    logger.info('number of tweets: ' + str(num_tweets))
-    tweet_grid = tweet_records \
-        .map(pp.get_tweet_modifier(pp.remove_url)) \
-        .map(pp.get_tweet_modifier(pp.remove_unicode)) \
-        .map(pp.get_tweet_modifier(pp.remove_apostrophe_in_contractions)) \
-        .map(pp.get_tweet_modifier(pp.keep_only_alphanumeric)) \
-        .map(pp.get_tweet_modifier(pp.strip_excessive_whitespace)) \
-        .map(lambda record: (pp.get_grid_index(grid_boundaries, record, 'tweet'),
-                             record[pp.tweet_field_index['tweet']])) \
-        .map(lambda pair: (pair[0], pair[1].split(' '))) \
-        .reduceByKey(lambda a,b: a + b)
-    
-    spark_session = sql.SparkSession.builder.appName("twitter-crime-prediction").getOrCreate()
-    tweet_grid_dataframe = spark_session.createDataFrame(tweet_grid, schema=["grid_id", "words"])
-    count_vectorizer = feature.CountVectorizer(inputCol="words", outputCol="features")
-    vectorizer_model = count_vectorizer.fit(tweet_grid_dataframe)
-    tweet_grid_dataframe = vectorizer_model.transform(tweet_grid_dataframe)
-    
-    lda = clustering.LDA().setFeaturesCol("features").setK(10).setTopicDistributionCol("topic_distributions")
-    lda_model = lda.fit(tweet_grid_dataframe)
-    topicDistributions = lda_model.transform(tweet_grid_dataframe)
-    
-    logger.info('first dataframe entry: ' + str(topicDistributions.first().asDict()))
-    
-    complaints_df = spark_session.read.load(
-        "crime_complaints_with_header.csv",
-        format="com.databricks.spark.csv",
-        header="true",
-        inferSchema="true")
-    complaints_rdd = complaints_df.rdd \
-        .map(list) \
-        .filter(pp.complaint_is_valid) \
-        .filter(
-            lambda cr:
-                pp.get_complaint_occurrence_day(cr)*24*60*60 >= tweet_history_cutoff
-                and pp.get_complaint_occurrence_day(cr)*24*60*60 < prediction_timestamp)
-    logger.info("num valid complaints: " + str(complaints_rdd.count()))
-#    complaints_per_day_per_gridsquare = complaints_rdd \
-#        .map(lambda complaint: ((pp.get_complaint_occurrence_day(complaint), pp.get_grid_index(grid_boundaries, complaint, 'complaint')), 1)) \
-#        .countByKey()
-    
-#    logger.info('complaint counts: ' + str(complaints_per_day_per_gridsquare.items()[0:4]))
-    
-    logger.info("finished")
+sparkImport("twokenize", ".")
+sparkImport('grid', '.')
 
+ss = sql.SparkSession.builder.appName("TwitterTokenizing")\
+                             .getOrCreate()
+
+tweets_schema = types.StructType([
+  types.StructField('id', types.LongType()),
+  types.StructField('timestamp', types.LongType()),
+  types.StructField('postalCode', types.StringType()),
+  types.StructField('lon', types.DoubleType()),
+  types.StructField('lat', types.DoubleType()),
+  types.StructField('tweet', types.StringType()),
+  types.StructField('user_id', types.LongType()),
+  types.StructField('application', types.StringType()),
+  types.StructField('source', types.StringType())
+])
+tweets_df = ss.read.csv('tweets2.csv',
+                         escape='"',
+                         header='true',
+                         schema=tweets_schema,
+                         mode='DROPMALFORMED')
+tweets_df = tweets_df.drop('id') \
+                     .drop('postalCode') \
+                     .drop('user_id') \
+                     .drop('application') \
+                     .drop('source')
+
+date_column = tweets_df['timestamp'].cast(types.TimestampType()) \
+                                    .cast(types.DateType())
+tweets_df = tweets_df.withColumn('date', date_column) \
+                     .drop('timestamp')
+
+date_to_column = functions.lit(datetime.datetime(2016, 3, 3))
+date_from_column = functions.lit(functions.date_sub(date_to_column, 31))
+tweets_df = tweets_df.filter(
+    ~(tweets_df.date < date_from_column)
+    & (tweets_df.date < date_to_column))
+
+sql_tokenize = functions.udf(
+    lambda tweet: twokenize.tokenize(tweet),
+    returnType=types.ArrayType(types.StringType()))
+tweets_df = tweets_df \
+    .withColumn("tweet_tokens", sql_tokenize(tweets_df.tweet)) \
+    .drop('tweet')
+
+# Southwest corner of New York:
+# lat = 40.488320, lon = -74.290739
+# Northeast corner of New York:
+# lat = 40.957189, lon = -73.635679
+
+latlongrid = grid.LatLonGrid(
+    lat_min=40.488320,
+    lat_max=40.957189,
+    lon_min=-74.290739,
+    lon_max=-73.635679,
+    lat_step=grid.get_lon_delta(1000, (40.957189 - 40.488320)/2.0),
+    lon_step=grid.get_lat_delta(1000))
+
+# The only way to group elements and get a set of data (as far as I know) is by converting the DataFrame into an RDD. 
+
+row_to_gridsquare_tokens = lambda row: (
+    latlongrid.grid_square_index(lat=row['lat'], lon=row['lon']),
+    row['tweet_tokens'])
+
+tokens_rdd = tweets_df.rdd.map(row_to_gridsquare_tokens) \
+                          .reduceByKey(operator.concat)
+
+tokens_df_schema = types.StructType([
+    types.StructField('grid_square', types.IntegerType()),
+    types.StructField('tokens', types.ArrayType(types.StringType()))
+])
+tokens_df = ss.createDataFrame(tokens_rdd, schema=tokens_df_schema)
+
+hashing_tf = feature.HashingTF(numFeatures=(2^18)-1, inputCol='tokens', outputCol='token_frequencies')
+tokens_df = hashing_tf.transform(tokens_df).drop('tokens')
+
+lda = clustering.LDA().setFeaturesCol('token_frequencies').setK(10).setTopicDistributionCol('topic_distributions')
+lda_model = lda.fit(tokens_df)
+tokens_df = lda_model.transform(tokens_df).drop('token_frequencies')
+
+LOGGER.debug(str(tokens_df.count()) + " entries like " + str(tokens_df.take(1)))
