@@ -43,6 +43,8 @@ def sparkImport(module_name, module_directory):
         module_directory + "/" + module_name + ".py")
     sc.addPyFile(module_path)
 
+# PART 1: Get topic distributions. 
+
 sparkImport("twokenize", ".")
 sparkImport('grid', '.')
 
@@ -123,5 +125,132 @@ pipeline = ml.Pipeline(stages=[hashing_tf, lda])
 lda_model = pipeline.fit(tokens_df)
 topic_distributions = lda_model.transform(tokens_df).drop('tokens').drop('token_frequencies')
 
-LOGGER.debug(str(topic_distributions.count()) + " entries like " + str(topic_distributions.take(1)))
+# PART 2: Get complaint counts per (grid square, date). 
 
+complaints_df_schema = types.StructType([
+    types.StructField('CMPLNT_NUM', types.IntegerType(),
+                      nullable=False),
+    types.StructField('CMPLNT_FR_DT', types.StringType()),
+    types.StructField('CMPLNT_FR_TM', types.StringType()),
+    types.StructField('CMPLNT_TO_DT', types.StringType()),
+    types.StructField('CMPLNT_TO_TM', types.StringType()),
+    types.StructField('RPT_DT', types.StringType(), nullable=False),
+    types.StructField('KY_CD', types.StringType()),
+    types.StructField('OFNS_DESC', types.StringType()),
+    types.StructField('PD_CD', types.IntegerType()),
+    types.StructField('PD_DESC', types.StringType()),
+    types.StructField('CRM_ATPT_CPTD_CD', types.StringType()),
+    types.StructField('LAW_CAT_CD', types.StringType()),
+    types.StructField('JURIS_DESC', types.StringType()),
+    types.StructField('BORO_NM', types.StringType()),
+    types.StructField('ADDR_PCT_CD', types.StringType()),
+    types.StructField('LOC_OF_OCCUR_DESC', types.StringType()),
+    types.StructField('PREM_TYP_DESC', types.StringType()),
+    types.StructField('PARKS_NM', types.StringType()),
+    types.StructField('HADEVELOPT', types.StringType()),
+    types.StructField('X_COORD_CD', types.FloatType()),
+    types.StructField('Y_COORD_CD', types.FloatType()),
+    types.StructField('Latitude', types.FloatType()),
+    types.StructField('Longitude', types.FloatType()),
+    types.StructField('Lat_Lon', types.StringType())])
+
+complaints_df = ss.read.csv(
+    "crime_complaints_with_header.csv",
+    header=True,
+    schema=complaints_df_schema)
+
+complaints_df = complaints_df \
+    .drop('CMPLNT_NUM') \
+    .drop('CMPLNT_FR_TM') \
+    .drop('CMPLNT_TO_TM') \
+    .drop('RPT_DT') \
+    .drop('KY_CD') \
+    .drop('OFNS_DESC') \
+    .drop('PD_CD') \
+    .drop('PD_DESC') \
+    .drop('CRM_ATPT_CPTD_CD') \
+    .drop('LAW_CAT_CD') \
+    .drop('JURIS_DESC') \
+    .drop('BORO_NM') \
+    .drop('ADDR_PCT_CD') \
+    .drop('LOC_OF_OCCUR_DESC') \
+    .drop('PREM_TYP_DESC') \
+    .drop('PARKS_NM') \
+    .drop('HADEVELOPT') \
+    .drop('X_COORD_CD') \
+    .drop('Y_COORD_CD') \
+    .drop('Lat_Lon')
+
+# Filter to find the complaints which have an exact date of occurrence
+# or which have a start and end date.
+
+complaints_df = complaints_df \
+    .filter(~complaints_df.CMPLNT_FR_DT.isNull())
+
+def string_to_date(s):
+    if s == None:
+        return None
+    else:
+        return datetime.datetime.strptime(s, '%m/%d/%Y')
+
+string_to_date_udf = functions.udf(string_to_date, types.DateType())
+
+# Now get the actual column dates.
+
+complaints_df = complaints_df \
+    .withColumn(
+        'FR_DT',
+        string_to_date_udf(complaints_df.CMPLNT_FR_DT)) \
+    .drop('CMPLNT_FR_DT') \
+    .withColumn('TO_DT',
+                string_to_date_udf(complaints_df.CMPLNT_TO_DT)) \
+    .drop('CMPLNT_TO_DT')
+
+# Now filter for complaints which occur on one day only. 
+
+complaints_df = complaints_df \
+    .filter(complaints_df.TO_DT.isNull() | (complaints_df.TO_DT == complaints_df.FR_DT)) \
+    .drop(complaints_df.TO_DT) \
+    .withColumnRenamed('FR_DT', 'Date')
+
+# Filter for complaints occurring within the date range..
+
+complaints_df = complaints_df.filter(
+    (complaints_df.Date < date_to_column) & (complaints_df.Date >= date_from_column))
+
+# Compute grid square for each crime. 
+
+def grid_square_from_lat_lon(lat, lon):
+    return latlongrid.grid_square_index(lat=lat, lon=lon)
+grid_square_from_lat_lon_udf = functions.udf(grid_square_from_lat_lon, returnType=types.IntegerType())
+
+grid_square_column = grid_square_from_lat_lon_udf(complaints_df.Latitude, complaints_df.Longitude)
+
+complaints_df = complaints_df \
+    .withColumn('GridSquare', grid_square_column) \
+    .drop('Latitude') \
+    .drop('Longitude')
+
+# Now count by (GridSquare, Date).
+
+complaints_df = complaints_df \
+    .groupBy(complaints_df.GridSquare, complaints_df.Date) \
+    .count()
+
+# PART 3: Defining the data matrix.
+
+data_matrix = topic_distributions.join(
+    complaints_df,
+    on=(complaints_df.GridSquare == topic_distributions.grid_square),
+    how='left_outer')
+data_matrix = data_matrix \
+    .drop('GridSquare') \
+    .withColumnRenamed('Date', 'date')
+# Now we should have our data matrix: Row(date, grid_square, topic_distribution). 
+
+# Last part: fill Null crime count values with 0. 
+
+data_matrix = data_matrix.fillna({'count': 0})
+
+LOGGER.debug(data_matrix.take(10))
+LOGGER.debug(data_matrix.count())

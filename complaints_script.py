@@ -8,6 +8,8 @@ import pyspark.sql as sql
 import pyspark.sql.functions as functions
 import pyspark.sql.types as types
 
+import grid
+
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
 LOGGER.addHandler(logging.FileHandler('script_log.txt'))
@@ -126,5 +128,44 @@ complaints_df = complaints_df \
     .drop(complaints_df.TO_DT) \
     .withColumnRenamed('FR_DT', 'Date')
 
-LOGGER.debug(complaints_df.take(1))
+# Filter for complaints occurring within the past month.
+
+date_to_column = functions.lit(datetime.datetime(2015, 3, 3))
+date_from_column = functions.lit(functions.date_sub(date_to_column, 31))
+complaints_df = complaints_df.filter(
+    (complaints_df.Date < date_to_column) & (complaints_df.Date >= date_from_column))
+
+# Compute grid square for each crime. 
+
+# Southwest corner of New York:
+# lat = 40.488320, lon = -74.290739
+# Northeast corner of New York:
+# lat = 40.957189, lon = -73.635679
+
+latlongrid = grid.LatLonGrid(
+    lat_min=40.488320,
+    lat_max=40.957189,
+    lon_min=-74.290739,
+    lon_max=-73.635679,
+    lat_step=grid.get_lon_delta(1000, (40.957189 - 40.488320)/2.0),
+    lon_step=grid.get_lat_delta(1000))
+
+def grid_square_from_lat_lon(lat, lon):
+    return latlongrid.grid_square_index(lat=lat, lon=lon)
+grid_square_from_lat_lon_udf = functions.udf(grid_square_from_lat_lon, returnType=types.IntegerType())
+
+grid_square_column = grid_square_from_lat_lon_udf(complaints_df.Latitude, complaints_df.Longitude)
+
+complaints_df = complaints_df \
+    .withColumn('GridSquare', grid_square_column) \
+    .drop('Latitude') \
+    .drop('Longitude')
+
+# Now count by (GridSquare, Date).
+
+complaints_df = complaints_df \
+    .groupBy(complaints_df.GridSquare, complaints_df.Date) \
+    .count()
+
+LOGGER.debug(complaints_df.take(10))
 LOGGER.debug(complaints_df.count())
