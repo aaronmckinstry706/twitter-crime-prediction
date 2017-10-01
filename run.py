@@ -43,6 +43,13 @@ def sparkImport(module_name, module_directory):
         module_directory + "/" + module_name + ".py")
     sc.addPyFile(module_path)
 
+# PART 0: Define some useful parameters that define our task. 
+
+# We are only considering data between 1 and 31 (inclusive) days prior to the prediction date.
+NUM_DAYS = 15
+TO_DATE = datetime.datetime(2015, 3, 3)
+FROM_DATE = TO_DATE - datetime.timedelta(days=31)
+
 # PART 1: Get topic distributions. 
 
 sparkImport("twokenize", ".")
@@ -78,8 +85,8 @@ date_column = tweets_df['timestamp'].cast(types.TimestampType()) \
 tweets_df = tweets_df.withColumn('date', date_column) \
                      .drop('timestamp')
 
-date_to_column = functions.lit(datetime.datetime(2016, 3, 3))
-date_from_column = functions.lit(functions.date_sub(date_to_column, 31))
+date_to_column = functions.lit(TO_DATE)
+date_from_column = functions.lit(FROM_DATE)
 tweets_df = tweets_df.filter(
     ~(tweets_df.date < date_from_column)
     & (tweets_df.date < date_to_column))
@@ -239,6 +246,26 @@ complaints_df = complaints_df \
 
 # PART 3: Defining the data matrix.
 
+# complaints_df only contains (grid_square, date, count) entries for nonzero counts. So we need to
+# add 0-count entries for all (date, grid_square) pairs. 
+
+all_dates_squares_df = ss.createDataFrame(
+    [(gridSquare, TO_DATE - datetime.timedelta(days=i))
+     for gridSquare in range(-1, latlongrid.lat_grid_dimension * latlongrid.lon_grid_dimension)
+     for i in range(1, 1 + NUM_DAYS)],
+    schema=types.StructType([
+        types.StructField('GridSquare', types.IntegerType()),
+        types.StructField('Date', types.DateType())]))
+
+complaints_df = complaints_df.join(
+    all_dates_squares_df,
+    on=['GridSquare', 'Date'],
+    how='right_outer')
+
+complaints_df = complaints_df.fillna({'count': 0})
+
+# Now we can do a left outer join on topic_distributions and complaints_df to get our data matrix. 
+
 data_matrix = topic_distributions.join(
     complaints_df,
     on=(complaints_df.GridSquare == topic_distributions.grid_square),
@@ -246,11 +273,7 @@ data_matrix = topic_distributions.join(
 data_matrix = data_matrix \
     .drop('GridSquare') \
     .withColumnRenamed('Date', 'date')
-# Now we should have our data matrix: Row(date, grid_square, topic_distribution). 
-
-# Last part: fill Null crime count values with 0. 
-
-data_matrix = data_matrix.fillna({'count': 0})
+# Now we should have our data matrix: Row(date, grid_square, topic_distribution, count). 
 
 LOGGER.debug(data_matrix.take(10))
 LOGGER.debug(data_matrix.count())
