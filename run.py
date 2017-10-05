@@ -6,6 +6,7 @@ import sys
 
 import pyspark as pyspark
 import pyspark.ml.feature as feature
+import pyspark.ml.classification as classification
 import pyspark.ml as ml
 import pyspark.ml.clustering as clustering
 import pyspark.sql as sql
@@ -16,9 +17,14 @@ import twokenize
 import grid
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.addHandler(logging.StreamHandler(sys.stderr))
-LOGGER.addHandler(logging.FileHandler('script_log.txt'))
+FORMATTER = logging.Formatter(
+    "[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s")
+FILE_HANDLER = logging.FileHandler('script_log.txt')
+FILE_HANDLER.setFormatter(FORMATTER)
+LOGGER.addHandler(FILE_HANDLER)
 LOGGER.setLevel(logging.DEBUG)
+
+LOGGER.info("Starting run.")
 
 sc = pyspark.SparkContext()
 
@@ -43,20 +49,37 @@ def sparkImport(module_name, module_directory):
         module_directory + "/" + module_name + ".py")
     sc.addPyFile(module_path)
 
+# --------------------------------------------------------------------------------------------------
 # PART 0: Define some useful parameters that define our task. 
+# --------------------------------------------------------------------------------------------------
 
 # We are only considering data between 1 and 31 (inclusive) days prior to the prediction date.
-NUM_DAYS = 15
-TO_DATE = datetime.datetime(2015, 3, 3)
-FROM_DATE = TO_DATE - datetime.timedelta(days=31)
+NUM_DAYS = 31
+PREDICTION_DATE = datetime.datetime(2015, 3, 3)
+HISTORICAL_CUTOFF_DATE = PREDICTION_DATE - datetime.timedelta(days=31)
+
+# We're only considering tweets and complaints within the given grid square.
+
+# Southwest corner of New York:
+# lat = 40.488320, lon = -74.290739
+# Northeast corner of New York:
+# lat = 40.957189, lon = -73.635679
+
+latlongrid = grid.LatLonGrid(
+    lat_min=40.488320,
+    lat_max=40.957189,
+    lon_min=-74.290739,
+    lon_max=-73.635679,
+    lat_step=grid.get_lon_delta(1000, (40.957189 - 40.488320)/2.0),
+    lon_step=grid.get_lat_delta(1000))
 
 # PART 1: Get topic distributions. 
 
 sparkImport("twokenize", ".")
 sparkImport('grid', '.')
 
-ss = sql.SparkSession.builder.appName("TwitterTokenizing")\
-                             .getOrCreate()
+ss = (sql.SparkSession.builder.appName("TwitterTokenizing")
+                              .getOrCreate())
 
 tweets_schema = types.StructType([
   types.StructField('id', types.LongType()),
@@ -74,51 +97,37 @@ tweets_df = ss.read.csv('tweets2.csv',
                          header='true',
                          schema=tweets_schema,
                          mode='DROPMALFORMED')
-tweets_df = tweets_df.drop('id') \
-                     .drop('postalCode') \
-                     .drop('user_id') \
-                     .drop('application') \
-                     .drop('source')
+tweets_df = tweets_df.select(['timestamp', 'lon', 'lat', 'tweet'])
 
-date_column = tweets_df['timestamp'].cast(types.TimestampType()) \
-                                    .cast(types.DateType())
-tweets_df = tweets_df.withColumn('date', date_column) \
-                     .drop('timestamp')
+date_column = (tweets_df['timestamp'].cast(types.TimestampType())
+                                     .cast(types.DateType()))
+tweets_df = (tweets_df.withColumn('date', date_column)
+                      .drop('timestamp'))
 
-date_to_column = functions.lit(TO_DATE)
-date_from_column = functions.lit(FROM_DATE)
+date_to_column = functions.lit(PREDICTION_DATE)
+date_from_column = functions.lit(HISTORICAL_CUTOFF_DATE)
 tweets_df = tweets_df.filter(
-    ~(tweets_df.date < date_from_column)
-    & (tweets_df.date < date_to_column))
+    ~(tweets_df['date'] < date_from_column)
+    & (tweets_df['date'] < date_to_column))
 
 sql_tokenize = functions.udf(
     lambda tweet: twokenize.tokenize(tweet),
     returnType=types.ArrayType(types.StringType()))
-tweets_df = tweets_df \
-    .withColumn("tweet_tokens", sql_tokenize(tweets_df.tweet)) \
-    .drop('tweet')
+tweets_df = (tweets_df
+    .withColumn('tweet_tokens', sql_tokenize(tweets_df['tweet']))
+    .drop('tweet'))
 
-# Southwest corner of New York:
-# lat = 40.488320, lon = -74.290739
-# Northeast corner of New York:
-# lat = 40.957189, lon = -73.635679
+# tweets_df now has Row(tweet_tokens, date, lon, lat)
 
-latlongrid = grid.LatLonGrid(
-    lat_min=40.488320,
-    lat_max=40.957189,
-    lon_min=-74.290739,
-    lon_max=-73.635679,
-    lat_step=grid.get_lon_delta(1000, (40.957189 - 40.488320)/2.0),
-    lon_step=grid.get_lat_delta(1000))
-
-# The only way to group elements and get a set of data (as far as I know) is by converting the DataFrame into an RDD. 
+# The only way to group elements and get a set of data (as far as I know) is by converting the
+# DataFrame into an RDD. This is because I can't find the right operation on GroupedData in Pyspark.
 
 row_to_gridsquare_tokens = lambda row: (
     latlongrid.grid_square_index(lat=row['lat'], lon=row['lon']),
     row['tweet_tokens'])
 
-tokens_rdd = tweets_df.rdd.map(row_to_gridsquare_tokens) \
-                          .reduceByKey(operator.concat)
+tokens_rdd = (tweets_df.rdd.map(row_to_gridsquare_tokens)
+                           .reduceByKey(operator.concat))
 
 tokens_df_schema = types.StructType([
     types.StructField('grid_square', types.IntegerType()),
@@ -126,13 +135,19 @@ tokens_df_schema = types.StructType([
 ])
 tokens_df = ss.createDataFrame(tokens_rdd, schema=tokens_df_schema)
 
-hashing_tf = feature.HashingTF(numFeatures=(2^18)-1, inputCol='tokens', outputCol='token_frequencies')
-lda = clustering.LDA().setFeaturesCol('token_frequencies').setK(10).setTopicDistributionCol('topic_distributions')
-pipeline = ml.Pipeline(stages=[hashing_tf, lda])
-lda_model = pipeline.fit(tokens_df)
-topic_distributions = lda_model.transform(tokens_df).drop('tokens').drop('token_frequencies')
+hashing_tf = feature.HashingTF(
+    numFeatures=(2^18)-1, inputCol='tokens', outputCol='token_frequencies')
+lda = (clustering.LDA()
+    .setFeaturesCol('token_frequencies')
+    .setK(10)
+    .setTopicDistributionCol('topic_distribution'))
+topic_distribution_pipeline = ml.Pipeline(stages=[hashing_tf, lda])
+lda_model = topic_distribution_pipeline.fit(tokens_df)
+topic_distributions = lda_model.transform(tokens_df).select(['grid_square', 'topic_distribution'])
 
+# --------------------------------------------------------------------------------------------------
 # PART 2: Get complaint counts per (grid square, date). 
+# --------------------------------------------------------------------------------------------------
 
 complaints_df_schema = types.StructType([
     types.StructField('CMPLNT_NUM', types.IntegerType(),
@@ -166,33 +181,19 @@ complaints_df = ss.read.csv(
     header=True,
     schema=complaints_df_schema)
 
-complaints_df = complaints_df \
-    .drop('CMPLNT_NUM') \
-    .drop('CMPLNT_FR_TM') \
-    .drop('CMPLNT_TO_TM') \
-    .drop('RPT_DT') \
-    .drop('KY_CD') \
-    .drop('OFNS_DESC') \
-    .drop('PD_CD') \
-    .drop('PD_DESC') \
-    .drop('CRM_ATPT_CPTD_CD') \
-    .drop('LAW_CAT_CD') \
-    .drop('JURIS_DESC') \
-    .drop('BORO_NM') \
-    .drop('ADDR_PCT_CD') \
-    .drop('LOC_OF_OCCUR_DESC') \
-    .drop('PREM_TYP_DESC') \
-    .drop('PARKS_NM') \
-    .drop('HADEVELOPT') \
-    .drop('X_COORD_CD') \
-    .drop('Y_COORD_CD') \
-    .drop('Lat_Lon')
+complaints_df = (complaints_df
+    .select(['CMPLNT_FR_DT', 'CMPLNT_TO_DT', 'Latitude', 'Longitude'])
+    .withColumnRenamed('CMPLNT_FR_DT', 'from_date_string')
+    .withColumnRenamed('CMPLNT_TO_DT', 'to_date_string')
+    .withColumnRenamed('Latitude', 'lat')
+    .withColumnRenamed('Longitude', 'lon'))
 
 # Filter to find the complaints which have an exact date of occurrence
 # or which have a start and end date.
 
-complaints_df = complaints_df \
-    .filter(~complaints_df.CMPLNT_FR_DT.isNull())
+complaints_df = complaints_df.filter(~complaints_df['from_date_string'].isNull())
+
+# Now get the actual column dates.
 
 def string_to_date(s):
     if s == None:
@@ -202,78 +203,149 @@ def string_to_date(s):
 
 string_to_date_udf = functions.udf(string_to_date, types.DateType())
 
-# Now get the actual column dates.
-
-complaints_df = complaints_df \
-    .withColumn(
-        'FR_DT',
-        string_to_date_udf(complaints_df.CMPLNT_FR_DT)) \
-    .drop('CMPLNT_FR_DT') \
-    .withColumn('TO_DT',
-                string_to_date_udf(complaints_df.CMPLNT_TO_DT)) \
-    .drop('CMPLNT_TO_DT')
+complaints_df = (complaints_df
+    .withColumn('from_date', string_to_date_udf(complaints_df['from_date_string']))
+    .withColumn('to_date', string_to_date_udf(complaints_df['to_date_string']))
+    .select(['from_date', 'to_date', 'lat', 'lon']))
 
 # Now filter for complaints which occur on one day only. 
 
-complaints_df = complaints_df \
-    .filter(complaints_df.TO_DT.isNull() | (complaints_df.TO_DT == complaints_df.FR_DT)) \
-    .drop(complaints_df.TO_DT) \
-    .withColumnRenamed('FR_DT', 'Date')
-
-# Filter for complaints occurring within the date range..
-
-complaints_df = complaints_df.filter(
-    (complaints_df.Date < date_to_column) & (complaints_df.Date >= date_from_column))
+complaints_df = (complaints_df
+    .filter(complaints_df['to_date'].isNull()
+            | (complaints_df['to_date'] == complaints_df['from_date']))
+    .withColumnRenamed('from_date', 'date'))
+# Columns are now 'date', 'lat', and 'lon'.
 
 # Compute grid square for each crime. 
 
 def grid_square_from_lat_lon(lat, lon):
     return latlongrid.grid_square_index(lat=lat, lon=lon)
-grid_square_from_lat_lon_udf = functions.udf(grid_square_from_lat_lon, returnType=types.IntegerType())
+grid_square_from_lat_lon_udf = functions.udf(
+    grid_square_from_lat_lon, returnType=types.IntegerType())
 
-grid_square_column = grid_square_from_lat_lon_udf(complaints_df.Latitude, complaints_df.Longitude)
-
-complaints_df = complaints_df \
-    .withColumn('GridSquare', grid_square_column) \
-    .drop('Latitude') \
-    .drop('Longitude')
+complaints_df = (complaints_df
+    .withColumn('grid_square',
+                grid_square_from_lat_lon_udf(complaints_df['lat'], complaints_df['lon']))
+    .select('date', 'grid_square'))
 
 # Now count by (GridSquare, Date).
 
-complaints_df = complaints_df \
-    .groupBy(complaints_df.GridSquare, complaints_df.Date) \
+complaint_counts_df = (complaints_df
+    .groupBy(complaints_df['grid_square'], complaints_df['date'])
     .count()
+    .withColumnRenamed('count', 'complaint_count'))
+complaint_counts_df = (complaint_counts_df
+    .withColumn(
+        'complaint_count',
+        complaint_counts_df['complaint_count'].cast(types.DoubleType())))
+count_binarizer = feature.Binarizer(
+    threshold=0, inputCol='complaint_count', outputCol='binary_complaint_count')
+complaint_counts_df = count_binarizer.transform(complaint_counts_df)
+complaint_counts_df = (complaint_counts_df
+    .drop('complaint_counts')
+    .withColumnRenamed('binary_complaint_counts', 'complaint_counts'))
+# Columns are now 'date', 'grid_square', 'complaint_count', 'binary_complaint_count'. 
 
+# Filter for complaints occurring within the date range..
+
+past_complaint_counts_df = complaint_counts_df.filter(
+    (complaint_counts_df['date'] < date_to_column)
+    & (complaint_counts_df['date'] >= date_from_column))
+
+current_complaint_counts_df = complaint_counts_df.filter(
+    complaint_counts_df['date'] == date_to_column)
+
+# --------------------------------------------------------------------------------------------------
 # PART 3: Defining the data matrix.
+# --------------------------------------------------------------------------------------------------
 
-# complaints_df only contains (grid_square, date, count) entries for nonzero counts. So we need to
-# add 0-count entries for all (date, grid_square) pairs. 
+# Complaint count dataframes only have entries for nonzero counts. Fill in the nonzero entries.
 
 all_dates_squares_df = ss.createDataFrame(
-    [(gridSquare, TO_DATE - datetime.timedelta(days=i))
-     for gridSquare in range(-1, latlongrid.lat_grid_dimension * latlongrid.lon_grid_dimension)
+    [(gridSquare, PREDICTION_DATE - datetime.timedelta(days=i))
+     for gridSquare in range(-1, latlongrid.grid_size)
      for i in range(1, 1 + NUM_DAYS)],
     schema=types.StructType([
-        types.StructField('GridSquare', types.IntegerType()),
-        types.StructField('Date', types.DateType())]))
+        types.StructField('grid_square', types.IntegerType()),
+        types.StructField('date', types.DateType())]))
 
-complaints_df = complaints_df.join(
+all_squares_df = ss.createDataFrame(
+    [(gridSquare,) for gridSquare in range(-1, latlongrid.grid_size)],
+    schema=types.StructType([
+        types.StructField('grid_square', types.IntegerType())]))
+
+past_complaint_counts_df = past_complaint_counts_df.join(
     all_dates_squares_df,
-    on=['GridSquare', 'Date'],
+    on=['grid_square', 'date'],
     how='right_outer')
 
-complaints_df = complaints_df.fillna({'count': 0})
+past_complaint_counts_df = past_complaint_counts_df.fillna({'complaint_count': 0})
 
-# Now we can do a left outer join on topic_distributions and complaints_df to get our data matrix. 
+current_complaint_counts_df = current_complaint_counts_df.join(
+    all_squares_df,
+    on='grid_square',
+    how='right_outer')
+
+current_complaint_counts_df = (current_complaint_counts_df
+    .fillna({'complaint_count': 0})
+    .withColumn('date',
+                functions.when(current_complaint_counts_df['date'].isNull(), PREDICTION_DATE)
+                         .otherwise(current_complaint_counts_df['date'])))
+
+# Do a left outer join on topic_distributions and past_complaint_counts_df to get our data matrix. 
 
 data_matrix = topic_distributions.join(
-    complaints_df,
-    on=(complaints_df.GridSquare == topic_distributions.grid_square),
-    how='left_outer')
-data_matrix = data_matrix \
-    .drop('GridSquare') \
-    .withColumnRenamed('Date', 'date')
-# Now we should have our data matrix: Row(date, grid_square, topic_distribution, count). 
+    past_complaint_counts_df,
+    on='grid_square',
+    how='inner')
+# So far, data_matrix contains Row(date, grid_square, topic_distributions, complaint_count). 
 
-LOGGER.debug(data_matrix.take(10))
-LOGGER.debug(data_matrix.count())
+# Get weekday from date.
+
+get_weekday_udf = functions.udf(lambda d: d.weekday(), returnType=types.IntegerType())
+data_matrix = data_matrix.withColumn('weekday', get_weekday_udf(data_matrix['date']))
+
+# Assemble the feature vectors.
+
+weekday_one_hot_encoder = feature.OneHotEncoder(inputCol='weekday', outputCol='weekday_vector')
+feature_vector_assembler = feature.VectorAssembler(
+    inputCols=['weekday_vector', 'topic_distribution'], outputCol='final_feature_vector')
+feature_assembly_pipeline = (
+    ml.Pipeline(stages=[weekday_one_hot_encoder, feature_vector_assembler]).fit(data_matrix))
+
+data_matrix = (feature_assembly_pipeline.transform(data_matrix)
+    .select('date', 'grid_square', 'final_feature_vector', 'complaint_count'))
+
+LOGGER.debug(str(data_matrix.count()) + " rows like " + str(data_matrix.take(1)))
+
+#logistic_regression = classification.LogisticRegression(
+#    maxIter=10, regParam=0.3, elasticNetParam=0.8,
+#    featuresCol='final_feature_vector', labelCol='complaint_count',
+#    probabilityCol='predicted_probability')
+#logistic_model = logistic_regression.fit(data_matrix)
+
+#LOGGER.info(
+#    "coefficients: " + str(logistic_model.coefficientMatrix) + ", intercept: " + str(logistic_model.interceptVector))
+
+prediction_data_matrix = topic_distributions.join(
+    current_complaint_counts_df,
+    on='grid_square',
+    how='inner')
+prediction_data_matrix = (prediction_data_matrix
+    .withColumn('weekday', get_weekday_udf(prediction_data_matrix['date']))
+    .select('weekday', 'grid_square', 'date', 'topic_distribution', 'complaint_count'))
+prediction_data_matrix = (feature_assembly_pipeline.transform(prediction_data_matrix)
+    .select('grid_square', 'date', 'final_feature_vector', 'complaint_count'))
+
+LOGGER.debug(str(prediction_data_matrix.count()) + " rows like "
+             + str(prediction_data_matrix.take(1)))
+exit(0)
+
+#predicted_complaint_counts = (logistic_model.transform(prediction_data_matrix)
+#    .select('grid_square', 'complaint_count', 'predicted_probability')
+#    .collect())
+#
+#LOGGER.debug(str(predicted_complaint_counts.count()) + " rows like "
+#             + str(predicted_complaint_counts.take(1)) + ".")
+#exit(0)
+

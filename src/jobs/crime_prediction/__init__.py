@@ -1,0 +1,1 @@
+from jobs.crime_prediction.run import run

@@ -7,7 +7,7 @@ LatLonSquare = collections.namedtuple('Square', ['lat_min', 'lat_max', 'lon_min'
 
 class LatLonGrid(object):
     """
-    An object representing a rectangular grid of latitude and longitude regions. The latitude
+    A data structure representing a rectangular grid of latitude and longitude regions. The latitude
     boundaries are placed at even intervals of lat_step until lat_max is passed or reached. The
     final latitude boundary is then lat_max. The longitude boundaries are placed similarly. 
     
@@ -15,6 +15,10 @@ class LatLonGrid(object):
     approximately [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0]. LatLonGrid(0, 1, 0.5) will have
     latitude boundaries of [0, 0.5, 1.0]. The same holds for longitude boundaries when the
     longitude max, min and step are all defined as in the two examples given. 
+    
+    A unique integer index in range(self.grid_size) is also assigned to each grid square. This data
+    structure provides an efficient mapping operation from a latitude-longitude point to the id of
+    the grid square in which that point lies. 
     """
     def __init__(self, lat_min, lat_max, lon_min, lon_max, lat_step, lon_step):
         # Make sure all args are floats.
@@ -42,7 +46,7 @@ class LatLonGrid(object):
     def grid_square_index(self, lat, lon):
         """Given a position defined by (lat, lon), this function returns the index of the grid
         square in which this position lies. If the position lies outside of the grid, then -1 is
-        returned."""
+        returned; otherwise, an integer in range(self.grid_size) is returned."""
         lat_index = bisect.bisect_left(self._lat_bounds, lat)
         lon_index = bisect.bisect_left(self._lon_bounds, lon)
         if lat_index == 0 or lat_index == len(self._lat_bounds) \
@@ -59,6 +63,10 @@ class LatLonGrid(object):
     @property
     def lon_grid_dimension(self):
         return len(self._lon_bounds) - 1
+    
+    @property
+    def grid_size(self):
+        return self.lat_grid_dimension * self.lon_grid_dimension
 
 def get_lon_delta(meters_delta, current_lat):
     """At a given latitude, this function calculates how many degrees in longitude

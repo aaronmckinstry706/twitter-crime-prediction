@@ -1,0 +1,3 @@
+make
+cd dist
+spark-submit --master=yarn --deploy-mode=client --py-files jobs.zip main.py --job $1 --job-name $1 --job-args ${@:2}

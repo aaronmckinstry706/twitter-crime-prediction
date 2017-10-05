@@ -3,3 +3,6 @@
 !*.py
 !*.ipynb
 !.gitignore
+!makefile
+!run
+dist
