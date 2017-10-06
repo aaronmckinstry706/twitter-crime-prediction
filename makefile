@@ -1,7 +1,7 @@
 build: clean
 	mkdir ./dist
-	cp ./src/main.py ./dist
-	cd ./src && zip -x main.py -r ../dist/jobs.zip .
+	cp ./src/main.py ./src/tests.py ./dist
+	cd ./src && zip ../dist/jobs.zip . -x main.py tests.py -r
 
 clean:
 	rm -rf dist

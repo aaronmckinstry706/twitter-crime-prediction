@@ -1,7 +1,7 @@
 import os
 import unittest
 
-import grid
+from jobs.crime_prediction import grid as grid
 
 class GridSquareTest(unittest.TestCase):
     def setUp(self):

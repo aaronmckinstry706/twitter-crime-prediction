@@ -1,1 +1,1 @@
-from jobs.crime_prediction.run import run
+from jobs.crime_prediction.run_job import run

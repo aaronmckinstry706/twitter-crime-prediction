@@ -1,0 +1,9 @@
+make
+cd dist
+if [ "$1" = "cluster" ]
+then
+    spark-submit --master=yarn --deploy-mode=client --py-files jobs.zip tests.py
+else
+    spark-submit --py-files jobs.zip tests.py
+fi
+
