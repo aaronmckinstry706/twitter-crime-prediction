@@ -7,6 +7,7 @@ import pyspark.sql as sql
 import pyspark.sql.types as types
 
 from jobs.crime_prediction import run_job as run_job
+from jobs.crime_prediction import grid as grid
 
 class TestJob(unittest.TestCase):
     """This class is for testing any dataframe/rdd transformations which can't be tested without
@@ -53,18 +54,13 @@ class TestJob(unittest.TestCase):
         finally:
             subprocess.call(['hadoop', 'fs', '-rm', '-r', '-f', file_name])
     
+    @unittest.skip("Skipping until run_job is finished.")
     def test_filter_by_dates(self):
         input_tweets_schema = types.StructType([
-            types.StructField('timestamp', types.LongType()),
-            types.StructField('lat', types.DoubleType()),
-            types.StructField('lon', types.DoubleType()),
-            types.StructField('tweet', types.StringType())])
+            types.StructField('timestamp', types.LongType())])
         
         output_tweets_schema = types.StructType([
-            types.StructField('date', types.DateType()),
-            types.StructField('lat', types.DoubleType()),
-            types.StructField('lon', types.DoubleType()),
-            types.StructField('tweet', types.StringType())])
+            types.StructField('date', types.DateType())])
         
         EPOCH = datetime.date(1970, 1, 1)
         start_date = datetime.date(2016, 3, 3)
@@ -81,22 +77,61 @@ class TestJob(unittest.TestCase):
             end_timestamp + 24*60*60]
         
         input_tweets_df = self.ss.createDataFrame(
-            [sql.Row(timestamp=t, lat=34.89776, lon=48.3847, tweet=str(t))
+            [sql.Row(timestamp=t)
              for t in input_timestamps],
             schema=input_tweets_schema)
         
         output_tweets_df = self.ss.createDataFrame(
             [sql.Row(
-                date=datetime.datetime.utcfromtimestamp(t).replace(tzinfo=None).date(),
-                lat=34.89776, lon=48.3847, tweet=str(t))
+                date=datetime.datetime.utcfromtimestamp(t).replace(tzinfo=None).date())
              for t in input_timestamps if t >= start_timestamp and t < end_timestamp],
             schema=output_tweets_schema)
         
         actual_df = run_job.filter_by_dates(
             self.ss, input_tweets_df, start_date, end_date)
-        actual_list = sorted(actual_df.collect(), key=lambda d: d['tweet'])
-        expected_list = sorted(output_tweets_df.collect(), key=lambda d: d['tweet'])
+        actual_list = sorted(actual_df.collect(), key=lambda d: d['date'])
+        expected_list = sorted(output_tweets_df.collect(), key=lambda d: d['date'])
         
-        self.assertListEqual([r.asDict() for r in expected_list],
-                             [r.asDict() for r in actual_list])
+        self.assertListEqual(expected_list, actual_list)
+    
+    @unittest.skip("Skipping until run_job is finished.")
+    def test_group_by_grid_square_and_tokenize(self):
+        latlongrid = grid.LatLonGrid(
+            lat_min = 0,
+            lat_max = 10,
+            lon_min = 0,
+            lon_max = 10,
+            lat_step = 1,
+            lon_step = 1)
+        
+        input_tweets_schema = types.StructType(
+            [types.StructField('lat', types.DoubleType()),
+             types.StructField('lon', types.DoubleType()),
+             types.StructField('tweet', types.StringType())])
+        
+        output_tokens_schema = types.StructType(
+            [types.StructField('grid_square', types.IntegerType()),
+             types.StructField('tokens', types.ArrayType(types.StringType()))])
+        
+        input_tweets_df = self.ss.createDataFrame(
+            [(3.5, 3.5, '1 2 3'),
+             (3.3, 3.7, '1 2 3'),
+             (2.4, 5.3, '1 2 3 4 5 6')],
+            schema=input_tweets_schema)
+        
+        expected_ouptut_tokens_df = self.ss.createDataFrame(
+            [(latlongrid.grid_square_index(3.5, 3.5), ['1', '2', '3', '1', '2', '3']),
+             (latlongrid.grid_square_index(2.4, 5.3), ['1', '2', '3', '4', '5', '6'])],
+            schema=output_tokens_schema)
+        
+        actual_output_tokens_df = run_job.group_by_grid_square_and_tokenize(
+            self.ss, latlongrid, input_tweets_df)
+        
+        def collected_sorted_by_grid_square(df):
+            return sorted(df.collect(), key=lambda r: r['grid_square'])
+        
+        self.assertListEqual(collected_sorted_by_grid_square(expected_ouptut_tokens_df),
+                             collected_sorted_by_grid_square(actual_output_tokens_df))
+    
+    
 

@@ -1,12 +1,16 @@
+import argparse
 import datetime
+import operator
 
 import pyspark.sql as sql
 import pyspark.sql.functions as functions
 import pyspark.sql.types as types
 
+from jobs.crime_prediction import grid as grid
+from jobs.crime_prediction import twokenize as twokenize
+
 def import_twitter_data(spark_session, tweets_file_path):
-    """Imports the twitter data and returns resulting DataFrame, with columns
-    [timestamp, lon, lat, tweet].
+    """Imports the twitter data and returns resulting DataFrame.
     
     Args:
         spark_session    --    An active SparkSession.
@@ -36,8 +40,11 @@ def import_twitter_data(spark_session, tweets_file_path):
 
 def filter_by_dates(spark_session, tweets_df, start_date_inclusive, end_date_exclusive):
     """Converts the 'timestamp' column to 'date' column of type DateTime, then returns a
-    DataFrame containing only tweets which occurred between the start (inclusive) and end
+    DataFrame containing only entries with a 'date' between the start (inclusive) and end
     (exclusive) dates; columns are ['date', 'lat', 'lon', 'tweet'].
+    
+    The timestamps, and the resulting dates, are both assumed to be in UTC time. However,
+    the resulting dates are naive (i.e., not timezone-aware) datetime.date objects.
     
     Args:
         spark_session    --    An active SparkSession.
@@ -65,6 +72,55 @@ def filter_by_dates(spark_session, tweets_df, start_date_inclusive, end_date_exc
     
     return tweets_df
 
+def group_by_grid_square_and_tokenize(spark_session, latlongrid, tweets_df):
+    """Calculates the grid square id from 'lat' and 'lon' columns in tweets_df, and then
+    groups the tweets by grid square. Tweets are then tokenized. Returned dataframe has
+    columns ['grid_square', 'tokens'].
+    
+    Args:
+        spark_session    --    An active SparkSession.
+        latlongrid    --    A LatLonGrid object.
+        tweets_df    --    A dataframe with columns ['lat', 'lon', and 'tweet'] of types
+                           [DoubleType, DoubleType, StringType]."""
+    
+    sql_tokenize = functions.udf(
+        lambda tweet: twokenize.tokenize(tweet),
+        returnType=types.ArrayType(types.StringType()))
+    tweets_df = (tweets_df
+        .withColumn('tweet_tokens', sql_tokenize(tweets_df['tweet']))
+        .drop('tweet'))
+    
+    row_to_gridsquare_tokens = lambda row: (
+        latlongrid.grid_square_index(lat=row['lat'], lon=row['lon']),
+        row['tweet_tokens'])
+    
+    tokens_rdd = (tweets_df.rdd.map(row_to_gridsquare_tokens)
+                               .reduceByKey(operator.concat))
+    
+    tokens_df_schema = types.StructType([
+        types.StructField('grid_square', types.IntegerType()),
+        types.StructField('tokens', types.ArrayType(types.StringType()))
+    ])
+    tokens_df = spark_session.createDataFrame(tokens_rdd, schema=tokens_df_schema)
+    
+    return tokens_df
+
 def run(sc, args):
+    sc.setLogLevel('FATAL')
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('year', help='Year of prediction, in format YYYY.')
+    arg_parser.add_argument('month', help='Month of prediction, in format MM')
+    arg_parser.add_argument('day', help='Day of prediction, in format DD.')
+    
+    arg_parser.parse_args(args)
+    
     ss = sql.SparkSession(sc)
+    
+    tweets_df = import_twitter_data(ss, 'tweets2.csv')
+    
+    prediction_date = datetime.date(arg_parser.year, arg_parser.month, arg_parser.day)
+    NUM_DAYS_IN_HISTORY = 31
+    history_cutoff = prediction_date - datetime.timedelta(days=NUM_DAYS_IN_HISTORY)
+    filtered_tweets_df = filter_by_dates(ss, tweets_df, history_cutoff, prediction_date)
+    tokens_df = group_by_grid_square_and_tokenize(ss, latlongrid, filtered_tweets_df)
 
