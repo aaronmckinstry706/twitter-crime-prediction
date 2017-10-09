@@ -109,6 +109,79 @@ def group_by_grid_square_and_tokenize(spark_session, latlongrid, tweets_df):
     
     return tokens_df
 
+def load_filter_format_valid_complaints(spark_session, complaints_file_path):
+    """Loads the complaints and returns the resulting DataFrame. Only crimes which occur
+    during a single day are included. The date columns, originally strings, are converted
+    to datetime.date objects. The returned columns are ['date', 'lat', 'lon']"""
+    
+    complaints_df_schema = types.StructType([
+        types.StructField('CMPLNT_NUM', types.IntegerType(),
+                          nullable=False),
+        types.StructField('CMPLNT_FR_DT', types.StringType()),
+        types.StructField('CMPLNT_FR_TM', types.StringType()),
+        types.StructField('CMPLNT_TO_DT', types.StringType()),
+        types.StructField('CMPLNT_TO_TM', types.StringType()),
+        types.StructField('RPT_DT', types.StringType(), nullable=False),
+        types.StructField('KY_CD', types.StringType()),
+        types.StructField('OFNS_DESC', types.StringType()),
+        types.StructField('PD_CD', types.IntegerType()),
+        types.StructField('PD_DESC', types.StringType()),
+        types.StructField('CRM_ATPT_CPTD_CD', types.StringType()),
+        types.StructField('LAW_CAT_CD', types.StringType()),
+        types.StructField('JURIS_DESC', types.StringType()),
+        types.StructField('BORO_NM', types.StringType()),
+        types.StructField('ADDR_PCT_CD', types.StringType()),
+        types.StructField('LOC_OF_OCCUR_DESC', types.StringType()),
+        types.StructField('PREM_TYP_DESC', types.StringType()),
+        types.StructField('PARKS_NM', types.StringType()),
+        types.StructField('HADEVELOPT', types.StringType()),
+        types.StructField('X_COORD_CD', types.FloatType()),
+        types.StructField('Y_COORD_CD', types.FloatType()),
+        types.StructField('Latitude', types.FloatType()),
+        types.StructField('Longitude', types.FloatType()),
+        types.StructField('Lat_Lon', types.StringType())])
+    
+    complaints_df = spark_session.read.csv(
+        complaints_file_path,
+        header=True,
+        schema=complaints_df_schema)
+    
+    complaints_df = (complaints_df
+        .select(['CMPLNT_FR_DT', 'CMPLNT_TO_DT', 'Latitude', 'Longitude'])
+        .withColumnRenamed('CMPLNT_FR_DT', 'from_date_string')
+        .withColumnRenamed('CMPLNT_TO_DT', 'to_date_string')
+        .withColumnRenamed('Latitude', 'lat')
+        .withColumnRenamed('Longitude', 'lon'))
+    
+    # Filter to find the complaints which have an exact date of occurrence
+    # or which have a start and end date.
+    
+    complaints_df = complaints_df.filter(~complaints_df['from_date_string'].isNull())
+    
+    # Now get the actual column dates.
+    
+    def string_to_date(s):
+        if s == None:
+            return None
+        else:
+            return datetime.datetime.strptime(s, '%m/%d/%Y').date()
+    
+    string_to_date_udf = functions.udf(string_to_date, types.DateType())
+    
+    complaints_df = (complaints_df
+        .withColumn('from_date', string_to_date_udf(complaints_df['from_date_string']))
+        .withColumn('to_date', string_to_date_udf(complaints_df['to_date_string']))
+        .select(['from_date', 'to_date', 'lat', 'lon']))
+    
+    # Now filter for complaints which occur on one day only. 
+    
+    complaints_df = (complaints_df
+        .filter(complaints_df['to_date'].isNull()
+                | (complaints_df['to_date'] == complaints_df['from_date']))
+        .withColumnRenamed('from_date', 'date'))
+    
+    return complaints_df.select('date', 'lat', 'lon')
+
 def run(sc, args):
     sc.setLogLevel('FATAL')
     arg_parser = argparse.ArgumentParser()
@@ -147,5 +220,10 @@ def run(sc, args):
     topic_distributions = (lda_model.transform(tokens_df)
                            .select(['grid_square', 'topic_distribution']))
     
-    topic_distributions.show()
+    complaints_df = load_filter_format_valid_complaints(
+        ss, 'crime_complaints_with_header.csv')
+    
+    complaints_df.show()
+    
+    #...
 

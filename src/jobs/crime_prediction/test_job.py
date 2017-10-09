@@ -133,5 +133,75 @@ class TestJob(unittest.TestCase):
         self.assertListEqual(collected_sorted_by_grid_square(expected_ouptut_tokens_df),
                              collected_sorted_by_grid_square(actual_output_tokens_df))
     
-    
+    @unittest.skip("Skipping until run_job is finished.")
+    def test_load_filter_format_valid_complaints(self):
+        complaints_df_schema = types.StructType([
+            types.StructField('CMPLNT_NUM', types.IntegerType(),
+                              nullable=False),
+            types.StructField('CMPLNT_FR_DT', types.StringType()),
+            types.StructField('CMPLNT_FR_TM', types.StringType()),
+            types.StructField('CMPLNT_TO_DT', types.StringType()),
+            types.StructField('CMPLNT_TO_TM', types.StringType()),
+            types.StructField('RPT_DT', types.StringType(), nullable=False),
+            types.StructField('KY_CD', types.StringType()),
+            types.StructField('OFNS_DESC', types.StringType()),
+            types.StructField('PD_CD', types.IntegerType()),
+            types.StructField('PD_DESC', types.StringType()),
+            types.StructField('CRM_ATPT_CPTD_CD', types.StringType()),
+            types.StructField('LAW_CAT_CD', types.StringType()),
+            types.StructField('JURIS_DESC', types.StringType()),
+            types.StructField('BORO_NM', types.StringType()),
+            types.StructField('ADDR_PCT_CD', types.StringType()),
+            types.StructField('LOC_OF_OCCUR_DESC', types.StringType()),
+            types.StructField('PREM_TYP_DESC', types.StringType()),
+            types.StructField('PARKS_NM', types.StringType()),
+            types.StructField('HADEVELOPT', types.StringType()),
+            types.StructField('X_COORD_CD', types.FloatType()),
+            types.StructField('Y_COORD_CD', types.FloatType()),
+            types.StructField('Latitude', types.FloatType()),
+            types.StructField('Longitude', types.FloatType()),
+            types.StructField('Lat_Lon', types.StringType())])
+        
+        input_date_strings = [
+            (None, '3/3/2015'), # Excluded.
+            ('3/4/2015', None), # Included.
+            ('3/5/2015', '3/5/2015'), # Included.
+            ('3/6/2015', '3/7/2015')] # Excluded.
+        
+        LATITUDE = 34.8748
+        LONGITUDE = 72.3483
+        def fill_in_irrelevant_inputs(from_date, to_date):
+            return (
+                38, from_date, "00:30:00", to_date, "00:34:00",
+                "bla", "bla", "bla", 56, "bla", "bla",
+                "bla", "bla", "bla", "bla", "bla", "bla", "bla", "bla", 360.48, 330.18,
+                LATITUDE, LONGITUDE, '(34.8748, 72.3483)')
+        
+        input_complaints_df = self.ss.createDataFrame(
+            [fill_in_irrelevant_inputs(from_date, to_date)
+             for from_date, to_date in input_date_strings],
+            schema=complaints_df_schema)
+        
+        expected_output_dates = [
+            datetime.date(2015, 3, 4),
+            datetime.date(2015, 3, 5)]
+        
+        expected_df = self.ss.createDataFrame(
+            [(d, LATITUDE, LONGITUDE) for d in expected_output_dates],
+            schema=types.StructType(
+                [types.StructField('date', types.DateType()), 
+                 types.StructField('lat', types.FloatType()),
+                 types.StructField('lon', types.FloatType())]))
+        
+        file_name = __name__ + '.csv'
+        try:
+            input_complaints_df.coalesce(1).write.option('header', 'true').csv(file_name)
+            actual_list = (run_job.load_filter_format_valid_complaints(self.ss, file_name)
+                .collect())
+            expected_list = expected_df.collect()
+            self.assertListEqual(expected_list, actual_list)
+        except:
+            raise
+        finally:
+            subprocess.call(['hadoop', 'fs', '-rm', '-r', '-f', file_name])
 
